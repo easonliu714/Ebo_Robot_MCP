@@ -28,10 +28,10 @@ jobs:
       - name: Prepare optional permanent release signing
         id: signing
         env:
-          KEYSTORE_B64: ${ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${ secrets.ANDROID_KEY_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
             echo "$KEYSTORE_B64" | base64 --decode > android/app/release.jks
@@ -63,7 +63,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EBO-Android-v0.1.0-build${ github.run_number }}
+          name: EBO-Android-v0.1.0-build${{ github.run_number }}
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error
