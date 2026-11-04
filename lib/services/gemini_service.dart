@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'mcp_service.dart';
+import 'action_map.dart';
 
 typedef ApproveTool = Future<bool> Function(String name, Map<String, dynamic> args);
 
@@ -97,10 +98,9 @@ class GeminiAgent {
     final declarations = <Map<String, dynamic>>[];
     for (var i = 0; i < tools.length; i++) {
       final tool = tools[i];
+      final safeName = tool.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
       final alias = 'tool_' + i.toString() + '_' +
-          tool.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').substring(
-            0, tool.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').length.clamp(0, 40),
-          );
+          (safeName.length > 40 ? safeName.substring(0, 40) : safeName);
       lookup[alias] = tool;
       declarations.add({
         'name': alias,
@@ -162,17 +162,16 @@ class GeminiAgent {
         if (executed >= 8) {
           result = {'error': '已達單次最多 8 個工具呼叫上限'};
         } else {
-          ActionResult:
           try {
             final permitted = await approve(definition.name, args);
             if (!permitted) {
               result = {'error': '使用者拒絕執行'};
-              break ActionResult;
+            } else {
+              ActionMap.validateArguments(definition, args);
+              result = await mcp.call(definition.name, args);
+              executed++;
+              onStep('已執行 MCP 工具：' + definition.name);
             }
-            // Validation here prevents schema-incompatible arguments being sent.
-            result = await mcp.call(definition.name, args);
-            executed++;
-            onStep('已執行 MCP 工具：' + definition.name);
           } catch (e) {
             result = {'error': '工具執行失敗'};
             onStep('MCP 工具失敗：' + definition.name);

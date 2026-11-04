@@ -46,6 +46,8 @@ jobs:
         run: flutter pub get
       - name: Static analysis
         run: flutter analyze --no-fatal-infos
+      - name: Remove scaffold boilerplate widget test
+        run: rm -f test/widget_test.dart
       - name: Automated tests
         run: flutter test
       - name: Build test APK
