@@ -5,6 +5,8 @@ import 'package:ebo_robot_mcp/services/diagnostics.dart';
 import 'package:ebo_robot_mcp/services/gemini_service.dart';
 import 'package:ebo_robot_mcp/services/mcp_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   group('MCP config', () {
@@ -37,6 +39,60 @@ void main() {
         }
       })), throwsFormatException);
     });
+  });
+
+  test('MCP handshake and tools/call reuse one session', () async {
+    final seen = <String>[];
+    final mock = MockClient((request) async {
+      final method = request.method == 'POST'
+          ? (jsonDecode(request.body) as Map)['method'].toString()
+          : 'DELETE';
+      seen.add(method);
+      if (method != 'initialize') {
+        expect(request.headers['mcp-session-id'], 'unit-test-session');
+      }
+      if (method == 'DELETE') return http.Response('', 204);
+      if (method == 'notifications/initialized') return http.Response('', 202);
+      final req = jsonDecode(request.body) as Map;
+      final result = switch (method) {
+        'initialize' => {
+          'protocolVersion': '2025-03-26',
+          'serverInfo': {'name': 'test', 'version': '1'},
+          'capabilities': {},
+        },
+        'tools/list' => {
+          'tools': [
+            {'name': 'photo', 'description': 'Take a photo',
+             'inputSchema': {'type': 'object', 'properties': {}}}
+          ]
+        },
+        'tools/call' => {
+          'content': [{'type': 'text', 'text': 'ok'}],
+          'isError': false,
+        },
+        _ => {},
+      };
+      return http.Response(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': req['id'],
+        'result': result,
+      }), 200, headers: {
+        'content-type': 'application/json',
+        if (method == 'initialize') 'mcp-session-id': 'unit-test-session',
+      });
+    });
+    final client = McpClient(client: mock);
+    final tools = await client.connect(
+        McpConfig(Uri.parse('https://example.com/mcp'), 'TEST_ONLY_VALUE'));
+    expect(tools.single.name, 'photo');
+    final response = await client.call('photo', {});
+    expect(response['isError'], false);
+    await client.disconnect();
+    expect(seen, [
+      'initialize', 'notifications/initialized',
+      'tools/list', 'tools/call', 'DELETE',
+    ]);
+    client.dispose();
   });
 
   group('Gemini schema sanitation', () {
