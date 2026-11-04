@@ -361,6 +361,35 @@ class _ControllerScreenState extends State<ControllerScreen> {
                   onChanged: (v) => update(() => selected = v),
                 ),
                 const SizedBox(height: 16),
+                if (selected != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _mcp.tools.firstWhere((t) => t.name == selected).description,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('工具輸入 Schema：'),
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.black26,
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        const JsonEncoder.withIndent('  ').convert(
+                          _mcp.tools.firstWhere((t) => t.name == selected).schema,
+                        ),
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
                   controller: editor,
                   minLines: 2,
