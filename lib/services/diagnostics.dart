@@ -52,17 +52,68 @@ class DiagnosticEvent {
 class Diagnostics extends ChangeNotifier {
   final List<DiagnosticEvent> events = [];
   static const limit = 500;
+  File? _persistentFile;
+  Future<void> _writes = Future<void>.value();
+
+  Future<void> initialize() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      _persistentFile = File(dir.path + '/ebo_events.jsonl');
+      final file = _persistentFile!;
+      if (await file.exists()) {
+        final lines = await file.readAsLines();
+        for (final line in lines.skip(lines.length > limit ? lines.length - limit : 0)) {
+          try {
+            final obj = jsonDecode(line);
+            if (obj is! Map) continue;
+            final time = DateTime.tryParse(obj['time']?.toString() ?? '');
+            if (time == null) continue;
+            events.add(DiagnosticEvent(time, obj['level']?.toString() ?? 'INFO',
+                obj['component']?.toString() ?? 'APP',
+                Redactor.clean(obj['message']?.toString() ?? '')));
+          } catch (_) {
+            // Ignore a truncated line left by a sudden process termination.
+          }
+        }
+      }
+      notifyListeners();
+    } catch (_) {
+      // Diagnostics remain usable in memory if the filesystem is unavailable.
+    }
+  }
+
+  void _persist(DiagnosticEvent event) {
+    _writes = _writes.then((_) async {
+      final file = _persistentFile;
+      if (file == null) return;
+      if (await file.exists() && await file.length() > 512 * 1024) {
+        final recent = events.skip(events.length > 250 ? events.length - 250 : 0)
+            .map((e) => jsonEncode(e.toJson())).join('\n');
+        await file.writeAsString(recent + '\n', flush: true);
+      } else {
+        await file.writeAsString(jsonEncode(event.toJson()) + '\n',
+            mode: FileMode.append, flush: true);
+      }
+    }).catchError((Object _) {
+      // Logging must never break robot controls.
+    });
+  }
 
   void log(String component, String message, {String level = 'INFO'}) {
     final safe = Redactor.clean(message);
-    events.add(DiagnosticEvent(DateTime.now(), level, component, safe));
+    final event = DiagnosticEvent(DateTime.now(), level, component, safe);
+    events.add(event);
     if (events.length > limit) events.removeAt(0);
+    _persist(event);
     notifyListeners();
     if (kDebugMode) debugPrint('[$component][$level] $safe');
   }
 
   void clear() {
     events.clear();
+    _writes = _writes.then((_) async {
+      await _persistentFile?.writeAsString('');
+    });
     notifyListeners();
   }
 
@@ -70,6 +121,7 @@ class Diagnostics extends ChangeNotifier {
     required bool mcpOnline,
     required int toolCount,
   }) async {
+    await _writes;
     final package = await PackageInfo.fromPlatform();
     final dir = await getTemporaryDirectory();
     final file = File(

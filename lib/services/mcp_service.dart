@@ -167,6 +167,7 @@ class McpClient {
   }
 
   Future<List<McpTool>> connect(McpConfig value) => _exclusive(() async {
+    await _releaseSession();
     connected = false;
     tools = [];
     config = value;
@@ -216,12 +217,31 @@ class McpClient {
         return Map<String, dynamic>.from(body);
       });
 
-  void disconnect() {
+  Future<void> _releaseSession() async {
+    final cfg = config;
+    final sid = _session;
+    if (cfg == null || sid == null) return;
+    try {
+      final request = http.Request('DELETE', cfg.endpoint);
+      request.headers.addAll({
+        'Authorization': 'Bearer ' + cfg.bearer,
+        'Mcp-Session-Id': sid,
+        'MCP-Protocol-Version': _protocol,
+      });
+      final response = await _http.send(request).timeout(const Duration(seconds: 5));
+      await response.stream.drain<void>().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Some MCP servers do not implement DELETE. Local state is reset anyway.
+    }
+  }
+
+  Future<void> disconnect() => _exclusive(() async {
+    await _releaseSession();
     connected = false;
     tools = [];
     _session = null;
     config = null;
-  }
+  });
 
   void dispose() => _http.close();
 }

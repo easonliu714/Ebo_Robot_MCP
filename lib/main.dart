@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -80,10 +81,21 @@ class _ControllerScreenState extends State<ControllerScreen> {
     super.initState();
     _player = Player(configuration: const PlayerConfiguration(bufferSize: 1024 * 1024));
     _video = VideoController(_player);
+    FlutterError.onError = (details) {
+      _logs.log('FLUTTER', 'Unhandled framework error: ' +
+          details.exceptionAsString(), level: 'ERROR');
+      FlutterError.presentError(details);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      _logs.log('DART', 'Unhandled runtime error: ' + error.toString(),
+          level: 'ERROR');
+      return false;
+    };
     unawaited(_initialize());
   }
 
   Future<void> _initialize() async {
+    await _logs.initialize();
     try {
       final loaded = await _store.load();
       final info = await PackageInfo.fromPlatform();
@@ -167,7 +179,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
       }
       await _store.save(newSettings);
       _settings = newSettings;
-      _mcp.disconnect();
+      await _mcp.disconnect();
       setState(() {});
       _logs.log('SETTINGS', '設定已保存至 Android 加密儲存');
       _notify('設定已安全儲存');
@@ -735,7 +747,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
     _keyInput.dispose();
     _rtspInput.dispose();
     _logs.dispose();
-    _mcp.dispose();
+    unawaited(_mcp.disconnect().whenComplete(_mcp.dispose));
     _agent.dispose();
     unawaited(_player.dispose());
     unawaited(_recorder.dispose());
