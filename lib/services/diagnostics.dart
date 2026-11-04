@@ -120,6 +120,7 @@ class Diagnostics extends ChangeNotifier {
   Future<File> writeExport({
     required bool mcpOnline,
     required int toolCount,
+    List<Map<String, dynamic>> toolMetadata = const [],
   }) async {
     await _writes;
     final package = await PackageInfo.fromPlatform();
@@ -136,6 +137,8 @@ class Diagnostics extends ChangeNotifier {
         'platform': Platform.operatingSystem,
         'mcpOnline': mcpOnline,
         'discoveredTools': toolCount,
+        'mcpToolSchemas': toolMetadata.take(100)
+            .map((t) => Redactor.clean(jsonEncode(t))).toList(),
         'privacy': 'no raw credentials, prompts, voice files, or RTSP frames',
       }),
       ...events.map((e) => jsonEncode({'type': 'event', ...e.toJson()})),
@@ -147,8 +150,13 @@ class Diagnostics extends ChangeNotifier {
   Future<void> shareExport({
     required bool mcpOnline,
     required int toolCount,
+    List<Map<String, dynamic>> toolMetadata = const [],
   }) async {
-    final file = await writeExport(mcpOnline: mcpOnline, toolCount: toolCount);
+    final file = await writeExport(
+      mcpOnline: mcpOnline,
+      toolCount: toolCount,
+      toolMetadata: toolMetadata,
+    );
     await SharePlus.instance.share(ShareParams(
       files: [XFile(file.path)],
       text: 'EBO Controller diagnostic log (credentials removed)',

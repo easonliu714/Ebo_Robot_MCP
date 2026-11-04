@@ -8,7 +8,7 @@
 - Explicit robot D-pad, stop, gimbal, return-to-dock, photo and record mappings.
 - Gemini text and audio commands with per-tool approval dialog.
 - Android encrypted storage for all credentials and configured URLs.
-- Versioned redacted JSONL diagnostics exported through Android Share.
+- Versioned redacted JSONL diagnostics (including MCP tool schemas) exported through Android Share.
 - GitHub Actions tests and versioned APK artifacts; optional permanent release signing.
 
 ### Limitations

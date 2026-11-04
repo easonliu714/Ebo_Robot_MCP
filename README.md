@@ -44,7 +44,7 @@ package ID and same signing key. Debug and release builds cannot upgrade each ot
 ## Export bug reports
 
 Tap Log → 匯出 Log. Share the generated JSONL. It includes version/build,
-timestamp, MCP status, tool count, status/error event codes. Credentials,
+timestamp, MCP status, sanitized tool schemas, status/error event codes. Credentials,
 prompts, microphone audio and RTSP frames are not deliberately logged.
 **Inspect the exported file before sharing**, since any software redactor
 can miss unexpected secret formats.

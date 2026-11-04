@@ -686,6 +686,11 @@ class _ControllerScreenState extends State<ControllerScreen> {
                 await _logs.shareExport(
                   mcpOnline: _mcp.connected,
                   toolCount: _mcp.tools.length,
+                  toolMetadata: _mcp.tools.map((t) => {
+                    'name': t.name,
+                    'description': t.description,
+                    'inputSchema': t.schema,
+                  }).toList(),
                 );
               } catch (e) {
                 _notify('匯出失敗：' + e.runtimeType.toString());
@@ -698,7 +703,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
       ),
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 12),
-        child: Text('匯出為 JSONL，包含版本、時間、MCP 連線狀態、操作與錯誤摘要；'
+        child: Text('匯出為 JSONL，包含版本、時間、MCP 連線狀態、工具 Schema、操作與錯誤摘要；'
             '不包含 API Key、MCP AccessKey、語音內容或影像。'),
       ),
       Expanded(child: AnimatedBuilder(
