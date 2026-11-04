@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.1.0+1 — development preview, hardware not yet verified.**
+**Current version: 0.1.1+2 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -23,7 +23,7 @@ Never commit real keys, voice data, RTSP credentials, screenshots or logs.
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.1.0-buildN-debug.apk; internal version is 0.1.0+N.
+Filename: EBO-v0.1.1-buildN-debug.apk; internal version is 0.1.1+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.
@@ -60,7 +60,8 @@ Flutter stable, Java 17 and the Android SDK are required. In this repository:
     flutter test
     flutter run
 
-CI generates Android scaffolding on every build instead of committing it.
+CI generates Android scaffolding on every build instead of committing it,
+then deletes the auto-generated `test/widget_test.dart` before static analysis.
 
 ## Limitations
 

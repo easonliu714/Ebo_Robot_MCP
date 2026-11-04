@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1+2 — 2026-11-05
+
+- Fix CI static analysis: remove the auto-generated Flutter `test/widget_test.dart` before `flutter analyze`.
+- Retain real unit tests in `test/core_test.dart`.
+- Bump Flutter app version and APK artifact labels to v0.1.1.
+
+
 ## 0.1.0+1 — 2026-11-05
 
 - First Android Flutter controller preview.
