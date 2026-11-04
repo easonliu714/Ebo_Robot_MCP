@@ -2,16 +2,15 @@ import 'dart:convert';
 import 'mcp_service.dart';
 
 const robotActions = <String, String>{
-  'forward': '前進',
-  'backward': '後退',
-  'left': '左轉',
-  'right': '右轉',
-  'stop': '停止',
+  'forward': '前進（0.2 公尺）',
+  'backward': '後退（0.2 公尺）',
+  'left': '左轉（15 度）',
+  'right': '右轉（15 度）',
+  'stop': '停止移動',
   'photo': '機器人拍照',
-  'record_start': '開始攝影',
-  'record_stop': '停止攝影',
-  'dock': '自動回充',
-  'gimbal': '雲台歸位',
+  'record_clip': '錄影 10 秒',
+  'dock': '返回充電座',
+  'stop_patrol': '停止巡邏／導航',
 };
 
 class ActionBinding {
