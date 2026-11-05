@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.2+3 — 2026-11-05
+
+- Map all 15 real EBO-162 MCP tools to localized Chinese names and schema-aware manual controls in the Control tab.
+- Initialize 9 conservative quick actions (forward/backward/turn/stop/photo/10-second recording/dock/stop patrol) only when exact tool names and required schemas match, preserving user's existing mappings.
+- Correct recording semantics: `robot_record_video` accepts `recordSeconds`; remove unsupported start/stop recording toggle and simulated REC indicator.
+- Remove unsupported gimbal shortcut; replace with `robot_stop_patrol`.
+- Enforce MCP JSON Schema numeric bounds and 0–5 m forward/backward / 0–360° turn safety limits.
+- Add catalog and binding unit tests; preserve encrypted config, Gemini integration, and exportable diagnostics.
+- RTSP remote viewing is unchanged: private LAN URL requires VPN/subnet access.
+
+
+
 ## 0.1.1+2 — 2026-11-05
 
 - Fix CI static analysis: remove the auto-generated Flutter `test/widget_test.dart` before `flutter analyze`.
