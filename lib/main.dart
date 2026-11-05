@@ -13,6 +13,8 @@ import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'services/action_map.dart';
+import 'services/ebo_tool_catalog.dart';
+import 'screens/ebo_tool_panel.dart';
 import 'services/config_store.dart';
 import 'services/diagnostics.dart';
 import 'services/gemini_service.dart';
@@ -66,13 +68,12 @@ class _ControllerScreenState extends State<ControllerScreen> {
   late final VideoController _video;
 
   int _page = 0;
-  String _version = '0.1.0+1';
+  String _version = '0.1.2+3';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _aiBusy = false;
   bool _commandBusy = false;
   bool _voiceRecording = false;
-  bool _robotRecording = false;
   String _aiAnswer = '';
   PrivateSettings _settings = PrivateSettings();
 
@@ -135,6 +136,13 @@ class _ControllerScreenState extends State<ControllerScreen> {
       final config = McpConfig.parse(_settings.mcpJson);
       final tools = await _mcp.connect(config);
       _logs.log('MCP', '連線成功，取得 ' + tools.length.toString() + ' 個工具');
+      // Only match exact EBO names and Schema; never infer motion arguments.
+      final added = EboToolCatalog.applyKnownDefaults(_actionMap, tools);
+      if (added > 0) {
+        _settings.actionMap = _actionMap.exportJson();
+        await _store.save(_settings);
+        _logs.log('MAPPING', '已新增 ' + added.toString() + ' 個已驗證預設動作');
+      }
       if (tools.isEmpty) _notify('MCP 已連線但沒有工具');
     } catch (e) {
       _logs.log('MCP', '連線失敗：' + e.toString(), level: 'ERROR');
@@ -236,8 +244,6 @@ class _ControllerScreenState extends State<ControllerScreen> {
       await _mcp.call(binding.tool, binding.args);
       _logs.log('ACTION', '成功：' + (robotActions[action] ?? action) +
           ' → ' + binding.tool);
-      if (mounted && action == 'record_start') setState(() => _robotRecording = true);
-      if (mounted && action == 'record_stop') setState(() => _robotRecording = false);
       if (mounted) _notify((robotActions[action] ?? action) + '執行成功');
     } catch (e) {
       _logs.log('ACTION', (robotActions[action] ?? action) +
@@ -449,11 +455,6 @@ class _ControllerScreenState extends State<ControllerScreen> {
           ),
           if (!_videoRequested)
             const Center(child: Text('請至設定頁輸入 RTSP 位址並啟動')),
-          if (_robotRecording)
-            const Positioned(
-              top: 10, right: 12,
-              child: Chip(label: Text('機器人 REC', style: TextStyle(color: Colors.redAccent))),
-            ),
         ],
       ),
     ),
@@ -484,16 +485,15 @@ class _ControllerScreenState extends State<ControllerScreen> {
             onPressed: () => _robotAction('photo'),
           ),
           OutlinedButton.icon(
-            icon: Icon(_robotRecording ? Icons.stop : Icons.videocam),
-            label: Text(_robotRecording ? '停止機器人攝影' : '開始機器人攝影'),
-            onPressed: () => _robotAction(
-              _robotRecording ? 'record_stop' : 'record_start'),
+            icon: const Icon(Icons.videocam),
+            label: const Text('機器人錄影 10 秒'),
+            onPressed: () => _robotAction('record_clip'),
           ),
         ],
       ),
       const SizedBox(height: 10),
-      const Text('攝影按鈕呼叫 MCP 工具；僅在伺服器回報成功後顯示 REC。'
-          '手機截圖會建立本地 PNG 並開啟分享選單。'),
+      const Text('EBO 的 robot_record_video 僅提供指定秒數錄影，'
+          '不支援獨立的停止錄影指令。手機截圖為本地 PNG。'),
     ],
   );
 
@@ -518,7 +518,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
     children: [
       _videoPanel(),
       const SizedBox(height: 12),
-      const Center(child: Text('單次控制 · 請先設定每個動作的 Tool 與 JSON 參數')),
+      const Center(child: Text('已依實際 EBO Schema 預設保守的單次動作，可於設定頁編輯。')),
       const SizedBox(height: 8),
       Center(child: Column(children: [
         _directionButton('forward', Icons.keyboard_arrow_up),
@@ -537,17 +537,19 @@ class _ControllerScreenState extends State<ControllerScreen> {
           label: const Text('回充'),
         ),
         OutlinedButton.icon(
-          onPressed: () => _robotAction('gimbal'),
-          icon: const Icon(Icons.control_camera),
-          label: const Text('雲台歸位'),
+          onPressed: () => _robotAction('stop_patrol'),
+          icon: const Icon(Icons.stop_circle),
+          label: const Text('停止巡邏／導航'),
         ),
       ]),
       const SizedBox(height: 10),
       FilledButton.icon(
         onPressed: () => setState(() => _page = 3),
         icon: const Icon(Icons.tune),
-        label: const Text('編輯工具映射'),
+        label: const Text('編輯快捷鍵映射'),
       ),
+      const Divider(height: 28),
+      EboToolPanel(mcp: _mcp, logs: _logs),
     ],
   );
 
@@ -652,6 +654,8 @@ class _ControllerScreenState extends State<ControllerScreen> {
       ]),
       if (_mcp.tools.isEmpty)
         const Text('尚未取得 MCP 工具。請先設定有效憑證並連線。'),
+      const Text('常用快捷鍵：已根據實際 MCP Schema 自動預設',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
       ...robotActions.entries.map((entry) {
         final b = _actionMap[entry.key];
         return ListTile(
@@ -663,6 +667,9 @@ class _ControllerScreenState extends State<ControllerScreen> {
         );
       }),
       const SizedBox(height: 10),
+      const Text('15 個完整 MCP 功能位於「控制」分頁下方。'
+          '下列僅供修改方向、拍照、錄影、回充等常用快捷鍵。'),
+      const SizedBox(height: 12),
       const Text('MCP 憑證具有有效期限；過期請在 EBO App 更新並重新貼上。'
           '敏感資訊僅保存在本機加密儲存，不進入 GitHub 或匯出 Log。'),
     ],
