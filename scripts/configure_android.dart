@@ -41,8 +41,10 @@ void main() {
   if (build.contains('// EBO_RELEASE_CONFIG')) return;
   const signing = '''
 // EBO_RELEASE_CONFIG
-val eboSigningProperties = java.util.Properties().apply {
-    file("../key.properties").inputStream().use { load(it) }
+val eboSigningProperties = Properties().apply {
+    file("../key.properties").inputStream().use { stream ->
+        load(stream)
+    }
 }
 
 android {
@@ -60,6 +62,9 @@ android {
     exitCode = 2;
     return;
   }
+  // Avoid Kotlin Gradle DSL's java extension shadowing java.util.Properties.
+  // An import before the plugins {} block is legal in a Kotlin build script.
+  build = 'import java.util.Properties\n\n' + build;
   build = build.replaceFirst('android {', signing);
   build = build.replaceFirst(
     'signingConfig = signingConfigs.getByName("debug")',
