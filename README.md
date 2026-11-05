@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.1.1+2 — development preview, hardware not yet verified.**
+**Current version: 0.1.2+3 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -12,18 +12,41 @@ Gemini AI text/voice commands, and redacted exportable diagnostic logs.
    enter Gemini API Key, and RTSP URL. All values are stored locally in
    Android encrypted storage.
 3. Tap **加密儲存並重新連線**. Verify that tools/list returns tools.
-4. Map each button to a discovered tool and JSON argument object.
-   The app deliberately does not guess tool names or action parameters.
-5. Use 監控, 控制, AI and Log pages. AI commands require a confirmation dialog
+4. The app automatically supplies 9 conservative quick actions only when the
+   exact EBO tool names and real JSON Schemas match. Existing custom mappings
+   are never overwritten. Edit these under Settings if necessary.
+5. The **控制** screen lists all 15 MCP tools in Chinese, provides their
+   descriptions and input schemas, and opens an editable JSON argument dialog
+   followed by an explicit confirmation before calling a tool.
+6. Use 監控, 控制, AI and Log pages. AI commands require a confirmation dialog
    before each physical tool invocation.
 
 **Rotate any AccessKey previously published in a chat, document or repository.**
 Never commit real keys, voice data, RTSP credentials, screenshots or logs.
 
+## 15 EBO-162 MCP tools
+
+The **控制** page displays the live `tools/list` inventory. Supported
+tools from the verified EBO-162 diagnostic log are:
+`robot_move`, `robot_navigate`, `robot_patrol`, `robot_take_photo`,
+`robot_play_music`, `robot_go_home`, `robot_stop_patrol`,
+`robot_follow`, `robot_search_360`, `robot_record_video`,
+`robot_music_control`, `robot_set_volume`, `robot_speak`,
+`robot_list_locations`, `robot_status`.
+
+One-shot movement defaults are 0.2 m forward/back and 15-degree turns;
+the recording shortcut captures a 10-second clip on the robot.
+`robot_record_video` does not provide separate start and stop endpoints.
+No dedicated camera gimbal tool was found among these 15 tools.
+
+RTSP monitoring still requires direct network connectivity to the robot.
+If using an external Wi-Fi or cellular network, configure a safe VPN
+connection into the home LAN. This version does not bypass that restriction.
+
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.1.1-buildN-debug.apk; internal version is 0.1.1+N.
+Filename: EBO-v0.1.2-buildN-debug.apk; internal version is 0.1.2+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.
