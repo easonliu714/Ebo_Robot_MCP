@@ -1,7 +1,7 @@
 name: ebo_robot_mcp
 description: Secure EBO robot controller for Android
 publish_to: none
-version: 0.1.2+3
+version: 0.1.3+4
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -23,6 +23,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+# Source: user's approved minimal cyan robot/controller icon.
+# Executed after "flutter create" in GitHub Actions so the default launcher
+# icons and Android 8+ adaptive icon are both replaced.
+flutter_launcher_icons:
+  android: true
+  image_path: assets/icon/ebo_launcher.png
+  adaptive_icon_background: "#071A35"
+  adaptive_icon_foreground: assets/icon/ebo_launcher.png
+  adaptive_icon_foreground_inset: 22

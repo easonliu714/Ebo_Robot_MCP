@@ -44,6 +44,12 @@ jobs:
         run: dart run scripts/configure_android.dart
       - name: Dependencies
         run: flutter pub get
+      - name: Install EBO robot launcher icon (legacy + adaptive)
+        run: |
+          dart run flutter_launcher_icons
+          test -s android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          test -s android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
       # flutter create injects a demo test referring to non-existent MyApp.
       # Remove it BEFORE analyze so the app's real tests are checked.
       - name: Remove Flutter scaffold sample test
@@ -54,18 +60,18 @@ jobs:
         run: flutter test
       - name: Build test APK
         run: |
-          flutter build apk --debug --build-name=0.1.2 --build-number="$GITHUB_RUN_NUMBER"
+          flutter build apk --debug --build-name=0.1.3 --build-number="$GITHUB_RUN_NUMBER"
           mkdir -p artifacts
-          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.1.2-build$GITHUB_RUN_NUMBER-debug.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.1.3-build$GITHUB_RUN_NUMBER-debug.apk"
       - name: Build signed release APK if configured
         if: steps.signing.outputs.release == 'true' && github.event_name != 'pull_request'
         run: |
-          flutter build apk --release --build-name=0.1.2 --build-number="$GITHUB_RUN_NUMBER"
-          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.1.2-build$GITHUB_RUN_NUMBER-release.apk"
+          flutter build apk --release --build-name=0.1.3 --build-number="$GITHUB_RUN_NUMBER"
+          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.1.3-build$GITHUB_RUN_NUMBER-release.apk"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EBO-Android-v0.1.2-build${{ github.run_number }}
+          name: EBO-Android-v0.1.3-build${{ github.run_number }}
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error

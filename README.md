@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.1.2+3 — development preview, hardware not yet verified.**
+**Current version: 0.1.3+4 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -43,10 +43,19 @@ RTSP monitoring still requires direct network connectivity to the robot.
 If using an external Wi-Fi or cellular network, configure a safe VPN
 connection into the home LAN. This version does not bypass that restriction.
 
+## Android launcher icon
+
+The approved robot/controller icon is committed at
+`assets/icon/ebo_launcher.png`. GitHub Actions invokes `dart run flutter_launcher_icons`
+**after** generating the Android platform scaffold. This overwrites the
+Flutter template icon and generates both legacy and adaptive Android launcher
+resources. Android launchers may cache the prior icon; restart the launcher or
+reinstall the signed app if necessary.
+
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.1.2-buildN-debug.apk; internal version is 0.1.2+N.
+Filename: EBO-v0.1.3-buildN-debug.apk; internal version is 0.1.3+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.

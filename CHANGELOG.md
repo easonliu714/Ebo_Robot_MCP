@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3+4 — 2026-11-05
+
+- Fix release-signing Kotlin DSL errors when GitHub Secrets are present (explicit `java.util.Properties` import before the plugins block).
+- Replace Flutter default Android launcher icons with the user's minimal cyan EBO robot/controller artwork.
+- Generate standard density launcher icons and Android 8+ adaptive launcher icons in GitHub Actions.
+- Keep permanent JKS signing in GitHub Secrets; do not store secret values or private signing files in the repository.
+- Retain the 15 EBO MCP tools and existing diagnostic export.
+
+
 ## 0.1.2+3 — 2026-11-05
 
 - Map all 15 real EBO-162 MCP tools to localized Chinese names and schema-aware manual controls in the Control tab.
