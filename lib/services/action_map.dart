@@ -70,6 +70,29 @@ class ActionMap {
         if (allowed is List && !allowed.contains(value)) {
           throw FormatException('參數不在允許清單：' + entry.key);
         }
+        if (value is num) {
+          final min = spec['minimum'];
+          final max = spec['maximum'];
+          if (min is num && value < min) {
+            throw FormatException('參數小於最小值：' + entry.key);
+          }
+          if (max is num && value > max) {
+            throw FormatException('參數大於最大值：' + entry.key);
+          }
+        }
+      }
+    }
+    // Extra guard from EBO-162 movement documentation (not in numeric Schema bounds).
+    if (tool.name == 'robot_move') {
+      final moveId = args['moveId'];
+      final target = args['targetDistance'];
+      if ((moveId == 1 || moveId == 2) &&
+          (target is! num || target < 0 || target > 5)) {
+        throw const FormatException('前後移動距離須為 0–5 公尺');
+      }
+      if ((moveId == 3 || moveId == 4) &&
+          (target is! num || target < 0 || target > 360)) {
+        throw const FormatException('單次轉向角度須為 0–360 度');
       }
     }
   }
