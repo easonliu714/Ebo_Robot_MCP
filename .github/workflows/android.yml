@@ -60,18 +60,18 @@ jobs:
         run: flutter test
       - name: Build test APK
         run: |
-          flutter build apk --debug --build-name=0.2.0 --build-number="$GITHUB_RUN_NUMBER"
+          flutter build apk --debug --build-name=0.2.1 --build-number="$GITHUB_RUN_NUMBER"
           mkdir -p artifacts
-          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.0-build$GITHUB_RUN_NUMBER-debug.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.1-build$GITHUB_RUN_NUMBER-debug.apk"
       - name: Build signed release APK if configured
         if: steps.signing.outputs.release == 'true' && github.event_name != 'pull_request'
         run: |
-          flutter build apk --release --build-name=0.2.0 --build-number="$GITHUB_RUN_NUMBER"
-          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.0-build$GITHUB_RUN_NUMBER-release.apk"
+          flutter build apk --release --build-name=0.2.1 --build-number="$GITHUB_RUN_NUMBER"
+          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.1-build$GITHUB_RUN_NUMBER-release.apk"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EBO-Android-v0.2.0-build${{ github.run_number }}
+          name: EBO-Android-v0.2.1-build${{ github.run_number }}
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error

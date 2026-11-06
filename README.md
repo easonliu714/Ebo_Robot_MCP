@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.2.0+5 — development preview, hardware not yet verified.**
+**Current version: 0.2.1+6 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -52,7 +52,7 @@ Flutter template icon and generates both legacy and adaptive Android launcher
 resources. Android launchers may cache the prior icon; restart the launcher or
 reinstall the signed app if necessary.
 
-## AI conversation, favorites and spoken answers (v0.2.0)
+## AI conversation, favorites and spoken answers (v0.2.1)
 
 The AI tab keeps the latest 60 messages encrypted locally. Long-press a user
 message to add/remove it from favorite quick commands; tapping a favorite resends
@@ -84,7 +84,7 @@ inventing unsupported choices. The navigation form can query
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.2.0-buildN-debug.apk; internal version is 0.2.0+N.
+Filename: EBO-v0.2.1-buildN-debug.apk; internal version is 0.2.1+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.
@@ -132,3 +132,28 @@ A successful recording MCP call does not guarantee the robot exposes a
 downloadable MP4 in this app. Local snapshots can be shared as PNG.
 Only one MCP client is used inside the app; close other external clients
 before connecting if the EBO backend enforces a one-client restriction.
+
+## v0.2.1: RTSP and safe held-direction control
+
+Entering Monitor/Control from a different tab, or resuming the app while
+showing video, requests **one** RTSP reconnect. No persistent foreground
+reconnect loop is used. Tap "放大監控＋懸浮控制器" on the Control page to overlay
+semi-transparent direction, photo, recording and charging controls on a larger
+video view. The complete MCP tool list is collapsed by default.
+
+D-pad short tap executes its existing single-step binding. Long press a
+direction to repeat only **short verified robot_move steps** (forward/backward
+0.2 m; turns 15 degrees). Only one step is in flight, with at least 450 ms
+between completed requests, and at most 12 steps or 12 seconds per hold.
+Finger release, tab switch, app background, timeout or API error stops
+repetition and queues moveId=5 stop. Release does **not** guarantee an
+instant physical stop: MCP calls are serialized and the in-flight step may
+complete first. Test in an obstacle-free area. Gesture mode is disabled
+without validated direction and stop mappings.
+
+AI now has separate controls for:
+- Text/voice `MCP 控制`: standard agent function calling with approval.
+- Text question / spoken question `EBO 語音回覆`: Gemini Search-grounded
+  factual answering; speech questions first use a transcription-only API
+  call with **no** MCP tool declarations, then Search, then approved
+  `robot_speak`. No ungrounded weather answers get spoken automatically.

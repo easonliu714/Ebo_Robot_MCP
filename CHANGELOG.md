@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1+6 — 2026-11-06
+
+- On entry to Monitor/Control or return from background on a video tab, request a fresh RTSP open exactly once. Do not auto-poll during an uninterrupted foreground video session; retain manual refresh and log failures.
+- Expand the Control video into an available full-screen panel with a semi-transparent direction/photo/record/charge overlay; return to regular view using one button.
+- Collapse the complete MCP tools area by default and expand on demand. Preserve all 15+ dynamic tools.
+- Split AI voice control from "speech question → EBO spoken answer": audio is first transcribed without robot tools, then queried using Google Search Grounding, and finally voiced by an approved `robot_speak` call. Both text and speech Q&A have explicit UI buttons. Keep ordinary text/voice MCP controls.
+- Support tap-once or hold-to-repeat robot_move direction commands. A hold executes only verified short 0.2-m/15-degree micro-steps one at a time with at least 450 ms pause between completed RPCs, max 12 steps or 12 seconds. Release, timeout, app background, tab switch and errors all stop further repeats and enqueue a verified robot_move stop. This is sequential MCP stepping, not native continuous-velocity driving; stop may wait behind an in-flight step due to server/session serialization.
+- Extend CI unit tests for tab-entry RTSP policy, gesture hold watchdog/stop/serial steps, and speech transcription without MCP function calling.
+- Preserve encrypted credentials, user chat, favorites, notebook, robot launcher icon and permanent JKS release signing.
+
+
 ## 0.2.0+5 — 2026-11-06
 
 - Render every MCP tool returned by paginated `tools/list` (15 verified EBO tools, plus future server additions).
