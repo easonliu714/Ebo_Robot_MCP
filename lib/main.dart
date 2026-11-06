@@ -18,6 +18,7 @@ import 'services/config_store.dart';
 import 'services/diagnostics.dart';
 import 'services/mcp_service.dart';
 import 'services/video_tab_policy.dart';
+import 'services/hold_move_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +63,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   final _rtspInput = TextEditingController();
   late final Player _player;
   late final VideoController _video;
+  late final HoldMoveController _heldMove;
   StreamSubscription<String>? _rtspErrorSubscription;
 
   int _page = 0;
@@ -70,6 +72,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   bool _videoRequested = false;
   bool _streamConnecting = false;
   bool _expandedControl = false;
+  bool _holdingDirection = false;
+  String? _heldDirection;
   bool _commandBusy = false;
   PrivateSettings _settings = PrivateSettings();
 
@@ -79,6 +83,20 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     _player = Player(configuration: const PlayerConfiguration(bufferSize: 1024 * 1024));
     _video = VideoController(_player);
+    _heldMove = HoldMoveController(
+      sendStep: _sendHeldMoveStep,
+      sendStop: _sendHeldStop,
+      onState: (active, action) {
+        if (mounted) setState(() {
+          _holdingDirection = active;
+          _heldDirection = action;
+        });
+      },
+      onError: (e) {
+        _logs.log('MOVE_HOLD', '按住移動中斷：${e.runtimeType}', level: 'ERROR');
+        _notify('連續控制已停止；請查看 Log 與機器人狀態');
+      },
+    );
     _rtspErrorSubscription = _player.stream.error.listen((error) {
       _logs.log('RTSP', '播放器回報錯誤：' + Redactor.clean(error), level: 'ERROR');
       if (mounted) setState(() => _videoRequested = false);
@@ -184,6 +202,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   void _selectPage(int target) {
     final previous = _page;
     if (previous == target) return;
+    if (previous == 1) unawaited(_heldMove.end());
     setState(() {
       _page = target;
       if (target != 1) _expandedControl = false;
@@ -196,6 +215,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(_heldMove.end());
     if (state == AppLifecycleState.resumed &&
         VideoTabPolicy.shouldResumeStream(_page) &&
         _settings.rtspUrl.isNotEmpty) {
@@ -259,6 +279,14 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   }
 
   Future<void> _robotAction(String action) async {
+    if (_holdingDirection) {
+      if (action == 'stop') {
+        await _heldMove.end();
+      } else {
+        _notify('請先放開目前按住的方向鍵');
+      }
+      return;
+    }
     if (_commandBusy && action != 'stop') return;
     final binding = _actionMap[action];
     if (binding == null || binding.tool.isEmpty) {
@@ -285,6 +313,73 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     } finally {
       if (mounted && action != 'stop') setState(() => _commandBusy = false);
     }
+  }
+
+  // Safety-critical: only the exact robot_move tool and documented moveId.
+  static const _moveIds = <String, int>{
+    'forward': 1, 'backward': 2, 'left': 3, 'right': 4,
+  };
+
+  bool _canHoldDirection(String action) {
+    if (_commandBusy || _holdingDirection || !_mcp.connected) return false;
+    final binding = _actionMap[action];
+    final stop = _actionMap['stop'];
+    if (binding?.tool != 'robot_move' ||
+        stop?.tool != 'robot_move' ||
+        binding?.args['moveId'] != _moveIds[action] ||
+        stop?.args['moveId'] != 5) {
+      return false;
+    }
+    final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
+    if (tool == null) return false;
+    try {
+      ActionMap.validateArguments(tool,
+          {...binding!.args,
+           'targetDistance': (action == 'left' || action == 'right') ? 15 : 0.2});
+      ActionMap.validateArguments(tool, stop!.args);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _beginHoldDirection(String action) {
+    if (!_canHoldDirection(action)) {
+      _notify('長按連發須使用已確認的 robot_move 方向與停止映射');
+      return;
+    }
+    _logs.log('MOVE_HOLD', '開始長按連續控制：$action（最長 12 秒）');
+    _heldMove.start(action);
+  }
+
+  Future<void> _sendHeldMoveStep(String action) async {
+    final binding = _actionMap[action];
+    final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
+    if (binding == null || tool == null || !_mcp.connected ||
+        binding.tool != 'robot_move' ||
+        binding.args['moveId'] != _moveIds[action]) {
+      throw const FormatException('已失去已驗證的移動映射或 MCP 連線');
+    }
+    // Ignore longer customized distances during HOLD: use bounded micro-steps.
+    final args = Map<String, dynamic>.from(binding.args)
+      ..['targetDistance'] =
+          (action == 'left' || action == 'right') ? 15 : 0.2;
+    ActionMap.validateArguments(tool, args);
+    await _mcp.call('robot_move', args);
+    _logs.log('MOVE_HOLD', '完成長按單步：$action');
+  }
+
+  Future<void> _sendHeldStop() async {
+    final stop = _actionMap['stop'];
+    final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
+    if (stop?.tool != 'robot_move' || tool == null ||
+        stop?.args['moveId'] != 5 || !_mcp.connected) {
+      throw const FormatException('無有效的 robot_move 停止映射');
+    }
+    ActionMap.validateArguments(tool, stop!.args);
+    _logs.log('MOVE_HOLD', '長按結束：已停止續發，排入停止指令');
+    await _mcp.call('robot_move', stop.args);
+    _logs.log('MOVE_HOLD', '機器人回應停止指令');
   }
 
   Future<void> _localSnapshot() async {
@@ -469,21 +564,34 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     ],
   );
 
-  Widget _directionButton(String action, IconData icon) => SizedBox(
-    width: 95, height: 62,
-    child: FilledButton.tonal(
-      style: FilledButton.styleFrom(
-        backgroundColor: action == 'stop' ? const Color(0xFF862B2B) : null,
-        padding: const EdgeInsets.all(5),
+  /// Tap: one move. Long press: bounded repeated steps until release.
+  Widget _directionButton(String action, IconData icon) {
+    final isStop = action == 'stop';
+    final isHeld = _heldDirection == action;
+    return SizedBox(
+      width: 95, height: 62,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _robotAction(action),
+        onLongPressStart: isStop ? null : (_) => _beginHoldDirection(action),
+        onLongPressEnd: isStop ? null : (_) => unawaited(_heldMove.end()),
+        onLongPressCancel: isStop ? null : () => unawaited(_heldMove.end()),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: isStop ? const Color(0xCC862B2B) :
+                isHeld ? const Color(0xCC147C8B) : const Color(0xB03E5D68),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isHeld ? Colors.cyanAccent : Colors.white38),
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 24),
+            Text(isStop ? '停止' : (isHeld ? '連發中' : (robotActions[action] ?? action)),
+              style: const TextStyle(fontSize: 11)),
+          ]),
+        ),
       ),
-      onPressed: (_commandBusy && action != 'stop')
-          ? null : () => _robotAction(action),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 24),
-        Text(robotActions[action] ?? action, style: const TextStyle(fontSize: 11)),
-      ]),
-    ),
-  );
+    );
+  }
 
   Widget _controlPage() => _expandedControl ? _expandedControlPage() : ListView(
     padding: const EdgeInsets.all(12),
@@ -497,7 +605,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
         ),
       ),
       const SizedBox(height: 8),
-      const Center(child: Text('可放大影像並在畫面上操作半透明控制器。')),
+      const Center(child: Text('點按單步；長按連發（最多 12 秒）。放開會停止續發並送停止指令。')),
+      if (_holdingDirection) const Center(child: Text('● 正在長按移動', style: TextStyle(color: Colors.cyanAccent))),
       const SizedBox(height: 8),
       Center(child: Column(children: [
         _directionButton('forward', Icons.keyboard_arrow_up),
@@ -790,6 +899,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_heldMove.active) unawaited(_heldMove.end());
+    _heldMove.dispose();
     unawaited(_rtspErrorSubscription?.cancel() ?? Future<void>.value());
     _mcpInput.dispose();
     _keyInput.dispose();
