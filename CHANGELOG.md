@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0+5 — 2026-11-06
+
+- Render every MCP tool returned by paginated `tools/list` (15 verified EBO tools, plus future server additions).
+- Replace raw JSON entry with Chinese localized, schema-driven per-field forms: numeric input and actual ranges; optional numeric-code choices; string dropdowns for declared enums; dropdown plus manual text for open-ended strings; boolean toggles; advanced JSON for complex values.
+- Add on-demand `robot_list_locations` lookup for locationName dropdown.
+- Preserve AI conversations locally across navigation/app restarts using encrypted device storage, up to 60 recent turns. Never automatically clear user input.
+- Long-press user messages to favorite/retire reusable commands; one tap re-sends, with standard physical-action approval. Save approved memory notes; user controls removal.
+- Include explicitly opted-in notebook and limited recent conversation as non-executable context with new Gemini messages.
+- Add external AI weather/current-information reply via Gemini Google Search grounding, then separate approved `robot_speak` tool call so EBO speaks the answer. No verified source means no weather announcement; requires explicit city/location in question.
+- Preserve private credentials outside GitHub and conversation content outside diagnostic Log.
+- Add unit tests covering persistence serialization, MCP numeric descriptions and grounded-search safety.
+
+
 ## 0.1.3+4 — 2026-11-05
 
 - Fix release-signing Kotlin DSL errors when GitHub Secrets are present (explicit `java.util.Properties` import before the plugins block).

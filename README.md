@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.1.3+4 — development preview, hardware not yet verified.**
+**Current version: 0.2.0+5 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -52,10 +52,39 @@ Flutter template icon and generates both legacy and adaptive Android launcher
 resources. Android launchers may cache the prior icon; restart the launcher or
 reinstall the signed app if necessary.
 
+## AI conversation, favorites and spoken answers (v0.2.0)
+
+The AI tab keeps the latest 60 messages encrypted locally. Long-press a user
+message to add/remove it from favorite quick commands; tapping a favorite resends
+it through Gemini with ordinary confirmation for every physical MCP operation.
+Long-press any message to add a background note to the opt-in private notebook.
+Notes and last few conversational turns are included as background in the next
+request but **never treated as a fresh robot command**. Clearing chat leaves
+favorites and notes intact. Notes and message contents are not exported in
+redacted JSONL diagnostics or stored in the repository.
+
+For factual current weather, enter an **explicit city or area** and select
+"查詢即時資訊，讓 EBO 語音回答". Gemini uses Google Search grounding
+separately from MCP tool calls; the answer requires verifiable grounding
+sources, then `robot_speak` sends a short Chinese TTS phrase **only after
+user confirmation**. Weather depends on Google Search coverage, network and
+the robot's speech support; voice output needs real-device validation.
+
+## Dynamic MCP tool forms
+
+The Control page uses the complete paginated `tools/list`. 15 known firmware
+tool names have Chinese labels, descriptions and common numeric code hints.
+Future tools appear with their raw server-provided names/descriptions.
+Parameter fields honor server-provided types, ranges and enumerations:
+numeric input, dropdowns, booleans, and advanced JSON for complex values.
+Open-ended text fields offer an "自訂文字" dropdown option rather than
+inventing unsupported choices. The navigation form can query
+`robot_list_locations` on demand. All invocations require confirmation.
+
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.1.3-buildN-debug.apk; internal version is 0.1.3+N.
+Filename: EBO-v0.2.0-buildN-debug.apk; internal version is 0.2.0+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.
