@@ -27,7 +27,7 @@ class EboTaskPlan {
       final minutes = requested == null ? null
           : int.tryParse(requested.group(1)!);
       final seconds = minutes == null ? 120
-          : (minutes * 60).clamp(30, 300);
+          : (minutes * 60).clamp(30, 300).toInt();
       final follow = RegExp(r'跟隨|跟著|追蹤').hasMatch(prompt);
       final followTime = RegExp(r'跟隨.{0,8}?(\d{1,2})\s*分鐘')
           .firstMatch(prompt);
