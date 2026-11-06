@@ -57,7 +57,7 @@ void main() {
             ]
           },
         }]
-      }), 200);
+      }), 200, headers: {'content-type': 'application/json; charset=utf-8'});
     });
     final gemini = GeminiAgent(client: client);
     final answer = await gemini.runGroundedQuestion(
@@ -73,7 +73,7 @@ void main() {
           'candidates': [{
             'content': {'parts': [{'text': '可能會下雨'}]}
           }],
-        }), 200));
+        }), 200, headers: {'content-type': 'application/json; charset=utf-8'}));
     final gemini = GeminiAgent(client: client);
     await expectLater(gemini.runGroundedQuestion(
       apiKey: 'test-key', prompt: '今天的天氣'), throwsFormatException);
