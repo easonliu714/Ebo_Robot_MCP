@@ -203,6 +203,54 @@ class GeminiAgent {
     return '已達 AI 最大步驟數（5 輪），停止後續工具呼叫。';
   }
 
+  /// First stage of spoken Q&A: transcribe without MCP tools or search.
+  Future<String> transcribeAudio({
+    required String apiKey,
+    required Uint8List bytes,
+  }) async {
+    if (apiKey.trim().isEmpty) {
+      throw const FormatException('尚未設定 Gemini API Key');
+    }
+    if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+      throw const FormatException('音檔不可為空且不可超過 10 MB');
+    }
+    final uri = Uri.https('generativelanguage.googleapis.com',
+        '/v1beta/models/' + model + ':generateContent');
+    final request = {
+      'contents': [{'role': 'user', 'parts': [
+        {'inline_data': {'mime_type': 'audio/mp4', 'data': base64Encode(bytes)}},
+        {'text': '請只逐字轉寫這段中文語音為繁體中文，'
+            '不要回答問題、不要呼叫工具、不要添加前後說明。'
+            '不確定或沒有清楚人聲時只回答「無法辨識」。'},
+      ]}],
+      'generationConfig': {'temperature': 0},
+    };
+    final response = await _http.post(uri, headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey.trim(),
+    }, body: jsonEncode(request)).timeout(const Duration(seconds: 45));
+    if (response.statusCode >= 400) {
+      throw Exception('語音轉寫 HTTP ' + response.statusCode.toString());
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes));
+    if (body is! Map || body['candidates'] is! List ||
+        (body['candidates'] as List).isEmpty) {
+      throw const FormatException('語音轉寫無有效候選內容');
+    }
+    final first = (body['candidates'] as List).first;
+    final content = first is Map ? first['content'] : null;
+    final parts = content is Map ? content['parts'] : null;
+    final transcript = parts is List
+        ? parts.whereType<Map>()
+            .map((item) => item['text']?.toString() ?? '')
+            .where((item) => item.isNotEmpty).join(' ').trim()
+        : '';
+    if (transcript.isEmpty || transcript == '無法辨識') {
+      throw const FormatException('無法辨識語音，請重新錄製');
+    }
+    return transcript.length > 400 ? transcript.substring(0, 400) : transcript;
+  }
+
   /// Use search-grounded Gemini independently from MCP function calls.
   /// Current weather/news must never be fabricated from the base model.
   /// We require returned grounding links before allowing robot speech.

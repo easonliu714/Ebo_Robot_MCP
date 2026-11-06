@@ -38,6 +38,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   final _input = TextEditingController();
   bool _busy = false;
   bool _recording = false;
+  bool _recordingGroundedQuestion = false;
 
   @override
   void initState() {
@@ -100,8 +101,12 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     }
   }
 
-  Future<void> _toggleVoice() async {
+  Future<void> _toggleVoice({bool groundedQuestion = false}) async {
     if (_busy) return;
+    if (_recording && _recordingGroundedQuestion != groundedQuestion) {
+      _notify('請先按目前的錄音按鈕結束錄音');
+      return;
+    }
     try {
       if (!_recording) {
         if (!await _recorder.hasPermission()) {
@@ -114,7 +119,10 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
           const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path,
         );
-        if (mounted) setState(() => _recording = true);
+        if (mounted) setState(() {
+          _recording = true;
+          _recordingGroundedQuestion = groundedQuestion;
+        });
       } else {
         final path = await _recorder.stop();
         if (mounted) setState(() => _recording = false);
@@ -122,18 +130,49 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
         final file = File(path);
         final bytes = await file.readAsBytes();
         await file.delete();
-        await _send(audio: Uint8List.fromList(bytes));
+        if (groundedQuestion) {
+          await _voiceGroundedQuestion(Uint8List.fromList(bytes));
+        } else {
+          await _send(audio: Uint8List.fromList(bytes));
+        }
       }
     } catch (e) {
-      if (mounted) setState(() => _recording = false);
+      if (mounted) setState(() {
+        _recording = false;
+        _recordingGroundedQuestion = false;
+      });
       widget.logs.log('VOICE', '錄音失敗：${e.runtimeType}', level: 'ERROR');
       _notify('語音指令錄製／傳送失敗');
     }
   }
 
-  Future<void> _groundedSpeak() async {
+  Future<void> _voiceGroundedQuestion(Uint8List audio) async {
     if (_busy) return;
-    final prompt = _input.text.trim();
+    setState(() => _busy = true);
+    String? transcript;
+    try {
+      widget.logs.log('VOICE_QA', '開始語音轉文字（音檔不保留）');
+      transcript = await _agent.transcribeAudio(
+        apiKey: widget.apiKey,
+        bytes: audio,
+      );
+      widget.logs.log('VOICE_QA', '語音轉寫成功；準備進行 Grounding 即時查詢');
+      _input.text = transcript;
+    } catch (e) {
+      widget.logs.log('VOICE_QA',
+          '轉寫失敗：' + e.runtimeType.toString(), level: 'ERROR');
+      _notify('無法辨識語音問題，請重新錄製');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted || transcript == null) return;
+    // This mode NEVER forwards a voice transcript to robot MCP controls.
+    await _groundedSpeak(promptOverride: transcript);
+  }
+
+  Future<void> _groundedSpeak({String? promptOverride}) async {
+    if (_busy) return;
+    final prompt = promptOverride ?? _input.text.trim();
     if (prompt.isEmpty) {
       _notify('請輸入問題及城市，例如：桃園市今天下午天氣');
       return;
@@ -318,8 +357,10 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     busy: _busy,
     voiceRecording: _recording,
     onSend: () => _send(),
-    onVoice: _toggleVoice,
-    onGroundedSpeak: _groundedSpeak,
+    onVoice: () => _toggleVoice(),
+    onVoiceGrounded: () => _toggleVoice(groundedQuestion: true),
+    voiceRecordingGrounded: _recordingGroundedQuestion,
+    onGroundedSpeak: () => _groundedSpeak(),
     onAddNote: _createNote,
     onClearChat: _clearChat,
     onLongPress: _longPress,

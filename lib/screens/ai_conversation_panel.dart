@@ -10,6 +10,8 @@ class AiConversationPanel extends StatelessWidget {
   final bool voiceRecording;
   final VoidCallback onSend;
   final VoidCallback onVoice;
+  final VoidCallback onVoiceGrounded;
+  final bool voiceRecordingGrounded;
   final VoidCallback onGroundedSpeak;
   final VoidCallback onAddNote;
   final VoidCallback onClearChat;
@@ -25,6 +27,8 @@ class AiConversationPanel extends StatelessWidget {
     required this.voiceRecording,
     required this.onSend,
     required this.onVoice,
+    required this.onVoiceGrounded,
+    required this.voiceRecordingGrounded,
     required this.onGroundedSpeak,
     required this.onAddNote,
     required this.onClearChat,
@@ -58,22 +62,39 @@ class AiConversationPanel extends StatelessWidget {
       FilledButton.icon(
         onPressed: busy ? null : onSend,
         icon: const Icon(Icons.send),
-        label: const Text('送出文字指令'),
+        label: const Text('文字指令 → MCP 控制'),
       ),
       const SizedBox(height: 8),
       FilledButton.tonalIcon(
-        onPressed: busy ? null : onVoice,
+        onPressed: busy || (voiceRecording && voiceRecordingGrounded) ? null : onVoice,
         icon: Icon(voiceRecording ? Icons.stop_circle : Icons.mic),
-        label: Text(voiceRecording ? '停止錄音並送出' : '錄製語音指令'),
+        label: Text(voiceRecording && !voiceRecordingGrounded
+            ? '停止錄音並執行控制' : '語音指令 → MCP 控制'),
       ),
+      const SizedBox(height: 8),
+      const Divider(height: 24),
+      const Text('AI 即時問答 → EBO 語音回覆',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+      const Text('這兩種模式均會先查詢 Google Search，'
+          '確認來源後，再請 EBO 語音播報；不會將查詢文字直接當成 MCP 動作。'),
       const SizedBox(height: 8),
       OutlinedButton.icon(
         onPressed: busy ? null : onGroundedSpeak,
-        icon: const Icon(Icons.record_voice_over),
-        label: const Text('查詢即時資訊，讓 EBO 語音回答'),
+        icon: const Icon(Icons.edit_note),
+        label: const Text('文字查詢 → EBO 語音回覆'),
       ),
-      const Text('即時天氣請明確寫城市／地區；查詢使用 Gemini Google Search，'
-          '有來源才會請 EBO 播報。'),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        onPressed: busy || (voiceRecording && !voiceRecordingGrounded)
+            ? null : onVoiceGrounded,
+        icon: Icon(voiceRecording && voiceRecordingGrounded
+            ? Icons.stop_circle : Icons.keyboard_voice),
+        label: Text(voiceRecording && voiceRecordingGrounded
+            ? '結束錄音 → 即時搜尋 → EBO 播報'
+            : '語音查詢 → EBO 語音回覆'),
+      ),
+      const Text('查詢天氣或活動時間，請說明城市／地區；'
+          '來源不足時不會讓 EBO 播報。'),
       if (busy) const Padding(padding: EdgeInsets.all(10),
         child: LinearProgressIndicator()),
       if (notebook.favorites.isNotEmpty) ...[
