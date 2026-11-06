@@ -17,6 +17,7 @@ import 'screens/ai_conversation_screen.dart';
 import 'services/config_store.dart';
 import 'services/diagnostics.dart';
 import 'services/mcp_service.dart';
+import 'services/video_tab_policy.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,7 +52,7 @@ class ControllerScreen extends StatefulWidget {
   State<ControllerScreen> createState() => _ControllerScreenState();
 }
 
-class _ControllerScreenState extends State<ControllerScreen> {
+class _ControllerScreenState extends State<ControllerScreen> with WidgetsBindingObserver {
   final _store = ConfigStore();
   final _mcp = McpClient();
   final _logs = Diagnostics();
@@ -61,19 +62,27 @@ class _ControllerScreenState extends State<ControllerScreen> {
   final _rtspInput = TextEditingController();
   late final Player _player;
   late final VideoController _video;
+  StreamSubscription<String>? _rtspErrorSubscription;
 
   int _page = 0;
-  String _version = '0.2.0+5';
+  String _version = '0.2.1+6';
   bool _connecting = false;
   bool _videoRequested = false;
+  bool _streamConnecting = false;
+  bool _expandedControl = false;
   bool _commandBusy = false;
   PrivateSettings _settings = PrivateSettings();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _player = Player(configuration: const PlayerConfiguration(bufferSize: 1024 * 1024));
     _video = VideoController(_player);
+    _rtspErrorSubscription = _player.stream.error.listen((error) {
+      _logs.log('RTSP', '播放器回報錯誤：' + Redactor.clean(error), level: 'ERROR');
+      if (mounted) setState(() => _videoRequested = false);
+    });
     FlutterError.onError = (details) {
       _logs.log('FLUTTER', 'Unhandled framework error: ' +
           details.exceptionAsString(), level: 'ERROR');
@@ -144,21 +153,53 @@ class _ControllerScreenState extends State<ControllerScreen> {
     }
   }
 
-  Future<void> _startStream() async {
+  /// Only reopen once per entry to a video tab or return from background.
+  /// Never poll/reopen continuously while the user stays in a foreground tab.
+  Future<void> _startStream({String reason = 'manual'}) async {
+    if (_streamConnecting) {
+      _logs.log('RTSP', '略過重複的串流開啟要求');
+      return;
+    }
     final raw = _settings.rtspUrl.trim();
+    if (raw.isEmpty) return;
     final uri = Uri.tryParse(raw);
     if (uri == null || uri.scheme.toLowerCase() != 'rtsp' || uri.host.isEmpty) {
       _notify('RTSP 網址格式不正確');
       return;
     }
-    _logs.log('RTSP', '開始播放串流（網址未記錄）');
+    if (mounted) setState(() => _streamConnecting = true);
+    _logs.log('RTSP', '重開串流（原因：' + reason + '；網址不記錄）');
     try {
       await _player.open(Media(raw), play: true);
       if (mounted) setState(() => _videoRequested = true);
-      _logs.log('RTSP', '已啟動播放器；若黑畫面請檢查 Wi-Fi 與 RTSP');
+      _logs.log('RTSP', '播放器已接收開啟請求（實際畫面以播放器錯誤事件為準）');
     } catch (e) {
       if (mounted) setState(() => _videoRequested = false);
-      _logs.log('RTSP', '串流啟動失敗：' + e.runtimeType.toString(), level: 'ERROR');
+      _logs.log('RTSP', '重連失敗：' + e.runtimeType.toString(), level: 'ERROR');
+    } finally {
+      if (mounted) setState(() => _streamConnecting = false);
+    }
+  }
+
+  void _selectPage(int target) {
+    final previous = _page;
+    if (previous == target) return;
+    setState(() {
+      _page = target;
+      if (target != 1) _expandedControl = false;
+    });
+    if (VideoTabPolicy.enteredVideoTab(previous, target) &&
+        _settings.rtspUrl.isNotEmpty) {
+      unawaited(_startStream(reason: 'tab-entry'));
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        VideoTabPolicy.shouldResumeStream(_page) &&
+        _settings.rtspUrl.isNotEmpty) {
+      unawaited(_startStream(reason: 'foreground-resume'));
     }
   }
 
@@ -367,11 +408,14 @@ class _ControllerScreenState extends State<ControllerScreen> {
 
   Widget _videoPanel() => AspectRatio(
     aspectRatio: 16 / 9,
-    child: Container(
-      color: Colors.black,
-      child: Stack(
+    child: Container(color: Colors.black, child: _videoContent()),
+  );
+
+  Widget _videoContent({bool expanded = false}) => Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(child: Video(controller: _video, controls: NoVideoControls)),
+          Video(controller: _video, controls: NoVideoControls,
+              fit: expanded ? BoxFit.cover : BoxFit.contain),
           Positioned(
             left: 8, top: 8,
             child: Chip(
@@ -381,11 +425,11 @@ class _ControllerScreenState extends State<ControllerScreen> {
               label: Text(_mcp.connected ? 'MCP 已連線' : 'MCP 未連線'),
             ),
           ),
-          if (!_videoRequested)
-            const Center(child: Text('請至設定頁輸入 RTSP 位址並啟動')),
+          if (_streamConnecting)
+            const Center(child: CircularProgressIndicator())
+          else if (!_videoRequested)
+            const Center(child: Text('影像尚未就緒，切換分頁可重連')),
         ],
-      ),
-    ),
   );
 
   Widget _monitorPage() => ListView(
@@ -400,7 +444,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
           FilledButton.icon(
             icon: const Icon(Icons.refresh),
             label: const Text('重連影像'),
-            onPressed: _startStream,
+            onPressed: () => _startStream(reason: 'manual-refresh'),
           ),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.photo_camera),
@@ -441,12 +485,19 @@ class _ControllerScreenState extends State<ControllerScreen> {
     ),
   );
 
-  Widget _controlPage() => ListView(
+  Widget _controlPage() => _expandedControl ? _expandedControlPage() : ListView(
     padding: const EdgeInsets.all(12),
     children: [
       _videoPanel(),
-      const SizedBox(height: 12),
-      const Center(child: Text('已依實際 EBO Schema 預設保守的單次動作，可於設定頁編輯。')),
+      Align(alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          onPressed: () => setState(() => _expandedControl = true),
+          icon: const Icon(Icons.fullscreen),
+          label: const Text('放大監控＋懸浮控制器'),
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Center(child: Text('可放大影像並在畫面上操作半透明控制器。')),
       const SizedBox(height: 8),
       Center(child: Column(children: [
         _directionButton('forward', Icons.keyboard_arrow_up),
@@ -477,7 +528,72 @@ class _ControllerScreenState extends State<ControllerScreen> {
         label: const Text('編輯快捷鍵映射'),
       ),
       const Divider(height: 28),
-      EboToolPanel(mcp: _mcp, logs: _logs),
+      ExpansionTile(
+        key: const PageStorageKey<String>('mcp-tools-expand'),
+        initiallyExpanded: false,
+        leading: const Icon(Icons.build_circle_outlined),
+        title: Text('完整 MCP 工具設定（${_mcp.tools.length} 項）'),
+        subtitle: const Text('點擊展開／收合，依原廠 Schema 設定每個工具'),
+        children: [EboToolPanel(mcp: _mcp, logs: _logs)],
+      ),
+    ],
+  );
+
+  /// Video stays on a single VideoController. Buttons are semi-transparent
+  /// overlays only in expanded mode. They still execute checked MCP bindings.
+  Widget _expandedControlPage() => Stack(
+    fit: StackFit.expand,
+    children: [
+      _videoContent(expanded: true),
+      Positioned(right: 10, top: 10,
+        child: FilledButton.tonalIcon(
+          onPressed: () => setState(() => _expandedControl = false),
+          icon: const Icon(Icons.fullscreen_exit),
+          label: const Text('返回一般畫面'),
+        ),
+      ),
+      Positioned(bottom: 8, left: 8, right: 8,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0x9909131B),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white38),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _directionButton('forward', Icons.keyboard_arrow_up),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _directionButton('left', Icons.keyboard_arrow_left),
+              _directionButton('stop', Icons.stop_circle),
+              _directionButton('right', Icons.keyboard_arrow_right),
+            ]),
+            _directionButton('backward', Icons.keyboard_arrow_down),
+            const SizedBox(height: 6),
+            Wrap(alignment: WrapAlignment.center, spacing: 8, children: [
+              IconButton.filledTonal(
+                tooltip: '機器人拍照',
+                onPressed: () => _robotAction('photo'),
+                icon: const Icon(Icons.photo_camera),
+              ),
+              IconButton.filledTonal(
+                tooltip: '機器人錄影 10 秒',
+                onPressed: () => _robotAction('record_clip'),
+                icon: const Icon(Icons.videocam),
+              ),
+              IconButton.filledTonal(
+                tooltip: '機器人回充',
+                onPressed: () => _robotAction('dock'),
+                icon: const Icon(Icons.battery_charging_full),
+              ),
+              IconButton.filledTonal(
+                tooltip: '停止巡邏／導航',
+                onPressed: () => _robotAction('stop_patrol'),
+                icon: const Icon(Icons.pause_circle_outline),
+              ),
+            ]),
+          ]),
+        ),
+      ),
     ],
   );
 
@@ -660,7 +776,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
     ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: _page,
-      onDestinationSelected: (i) => setState(() => _page = i),
+      onDestinationSelected: _selectPage,
       destinations: const [
         NavigationDestination(icon: Icon(Icons.videocam), label: '監控'),
         NavigationDestination(icon: Icon(Icons.gamepad), label: '控制'),
@@ -673,6 +789,8 @@ class _ControllerScreenState extends State<ControllerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_rtspErrorSubscription?.cancel() ?? Future<void>.value());
     _mcpInput.dispose();
     _keyInput.dispose();
     _rtspInput.dispose();
