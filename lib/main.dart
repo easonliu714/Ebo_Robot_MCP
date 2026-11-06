@@ -632,7 +632,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       ]),
       const SizedBox(height: 10),
       FilledButton.icon(
-        onPressed: () => setState(() => _page = 3),
+        onPressed: () => _selectPage(3),
         icon: const Icon(Icons.tune),
         label: const Text('編輯快捷鍵映射'),
       ),
@@ -869,7 +869,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
         ),
         IconButton(
           tooltip: '診斷 Log',
-          onPressed: () => setState(() => _page = 4),
+          onPressed: () => _selectPage(4),
           icon: const Icon(Icons.bug_report_outlined),
         ),
       ],
