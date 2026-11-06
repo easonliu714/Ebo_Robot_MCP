@@ -146,7 +146,7 @@ class AiConversationPanel extends StatelessWidget {
                         style: Theme.of(context).textTheme.labelSmall),
                     ]),
                     const SizedBox(height: 6),
-                    SelectableText(message.text),
+                    Text(message.text), // Long press belongs to InkWell; Copy is in its menu.
                     if (message.role == 'assistant')
                       Align(alignment: Alignment.centerRight,
                         child: IconButton(
