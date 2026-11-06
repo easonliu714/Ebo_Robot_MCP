@@ -62,6 +62,47 @@ void main() {
     mcp.dispose();
   });
 
+  test('approved cat patrol sends exact one MCP tools/call with bounded args',
+      () async {
+    final posted = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      posted.add(body);
+      return http.Response(jsonEncode({
+        'jsonrpc': '2.0',
+        'id': body['id'],
+        'result': {'content': [{'type': 'text', 'text': 'patrol accepted'}]},
+      }), 200, headers: {'content-type': 'application/json'});
+    });
+    final mcp = McpClient(client: client)
+      ..config = McpConfig(Uri.parse('https://example.test/api/v1/mcp'),
+          'not-a-real-token')
+      ..connected = true
+      ..tools = [const McpTool('robot_patrol', 'Patrol home', {
+        'type': 'object',
+        'properties': {
+          'duration': {'type': 'integer'},
+          'objId': {'type': 'string'},
+          'targetName': {'type': 'string'},
+        },
+      })];
+    final plan = EboTaskPlan.fromPrompt('全屋巡邏並尋找尾牙',
+        ['尾牙是家裡的寵物貓'])!;
+    final result = await plan.startPatrol(
+      mcp: mcp,
+      approve: (name, args) async => true,
+      onStep: (_) {},
+    );
+    expect(posted.length, 1);
+    expect(posted.single['method'], 'tools/call');
+    final params = posted.single['params'] as Map;
+    expect(params['name'], 'robot_patrol');
+    expect(params['arguments'],
+        {'duration': 120, 'objId': '2', 'targetName': '尾牙'});
+    expect(result, contains('尚未確認實際找到目標'));
+    mcp.dispose();
+  });
+
   test('cat patrol requires explicit approval and never calls on rejection',
       () async {
     final mcp = McpClient()
