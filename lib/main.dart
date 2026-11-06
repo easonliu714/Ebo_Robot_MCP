@@ -19,6 +19,7 @@ import 'services/diagnostics.dart';
 import 'services/mcp_service.dart';
 import 'services/video_tab_policy.dart';
 import 'services/hold_move_controller.dart';
+import 'services/move_step_policy.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +68,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   StreamSubscription<String>? _rtspErrorSubscription;
 
   int _page = 0;
-  String _version = '0.2.1+6';
+  String _version = '0.2.2+7';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _streamConnecting = false;
@@ -121,6 +122,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       final info = await PackageInfo.fromPlatform();
       if (!mounted) return;
       _settings = loaded;
+      _settings.leftTurnDegrees = MoveStepPolicy.normalizeLeftAngle(loaded.leftTurnDegrees);
       _version = info.version + '+' + info.buildNumber;
       _mcpInput.text = loaded.mcpJson;
       _keyInput.text = loaded.geminiKey;
@@ -235,6 +237,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       geminiKey: _keyInput.text.trim(),
       rtspUrl: _rtspInput.text.trim(),
       actionMap: _actionMap.exportJson(),
+      leftTurnDegrees: _settings.leftTurnDegrees,
     );
     try {
       if (newSettings.mcpJson.isNotEmpty) McpConfig.parse(newSettings.mcpJson);
@@ -307,10 +310,20 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     try {
       final definition = _mcp.tools.where((t) => t.name == binding.tool).firstOrNull;
       if (definition == null) throw const FormatException('工具不在目前 tools/list 中');
-      ActionMap.validateArguments(definition, binding.args);
-      await _mcp.call(binding.tool, binding.args);
+      // Visible, user-controlled left-turn calibration is shared by TAP/HOLD.
+      final args = Map<String, dynamic>.from(binding.args);
+      if (action == 'left' && binding.tool == 'robot_move' &&
+          args['moveId'] == 3) {
+        args['targetDistance'] = _settings.leftTurnDegrees;
+      }
+      ActionMap.validateArguments(definition, args);
+      final elapsed = Stopwatch()..start();
+      await _mcp.call(binding.tool, args);
+      elapsed.stop();
       _logs.log('ACTION', '成功：' + (robotActions[action] ?? action) +
-          ' → ' + binding.tool);
+          ' → ' + binding.tool +
+          (action == 'left' ? ' 左轉角度=' + _settings.leftTurnDegrees.toString() : '') +
+          ' 耗時=' + elapsed.elapsedMilliseconds.toString() + 'ms');
       if (mounted) _notify((robotActions[action] ?? action) + '執行成功');
     } catch (e) {
       _logs.log('ACTION', (robotActions[action] ?? action) +
@@ -341,7 +354,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     try {
       ActionMap.validateArguments(tool,
           {...binding!.args,
-           'targetDistance': (action == 'left' || action == 'right') ? 15 : 0.2});
+           'targetDistance': MoveStepPolicy.distance(action, leftAngle: _settings.leftTurnDegrees)});
       ActionMap.validateArguments(tool, stop!.args);
       return true;
     } catch (_) {
@@ -366,13 +379,18 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
         binding.args['moveId'] != _moveIds[action]) {
       throw const FormatException('已失去已驗證的移動映射或 MCP 連線');
     }
-    // Ignore longer customized distances during HOLD: use bounded micro-steps.
+    // Keep HOLD bounds; old arbitrary distances are never repeated.
     final args = Map<String, dynamic>.from(binding.args)
       ..['targetDistance'] =
-          (action == 'left' || action == 'right') ? 15 : 0.2;
+          MoveStepPolicy.distance(action, leftAngle: _settings.leftTurnDegrees);
     ActionMap.validateArguments(tool, args);
+    final elapsed = Stopwatch()..start();
     await _mcp.call('robot_move', args);
-    _logs.log('MOVE_HOLD', '完成長按單步：$action');
+    elapsed.stop();
+    _logs.log('MOVE_HOLD', '完成長按單步：$action moveId=' +
+        args['moveId'].toString() + ' angleOrDistance=' +
+        args['targetDistance'].toString() +
+        ' elapsedMs=' + elapsed.elapsedMilliseconds.toString());
   }
 
   Future<void> _sendHeldStop() async {
@@ -599,6 +617,42 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     );
   }
 
+  Widget _leftTurnCalibration() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    child: Row(children: [
+      const Icon(Icons.tune, color: Colors.cyanAccent),
+      const SizedBox(width: 8),
+      const Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('左轉角度校正'),
+          Text('單擊與長按共用；右轉保持 15°。',
+              style: TextStyle(fontSize: 12, color: Colors.white70)),
+        ],
+      )),
+      DropdownButton<int>(
+        value: MoveStepPolicy.normalizeLeftAngle(_settings.leftTurnDegrees),
+        items: const [
+          DropdownMenuItem(value: 15, child: Text('15°')),
+          DropdownMenuItem(value: 30, child: Text('30°')),
+          DropdownMenuItem(value: 45, child: Text('45°')),
+        ],
+        onChanged: (_holdingDirection || _commandBusy) ? null : (value) async {
+          if (value == null) return;
+          setState(() => _settings.leftTurnDegrees = value);
+          try {
+            await _store.save(_settings);
+            _logs.log('MOVE_CONFIG', '左轉校正角度=' + value.toString() + '°');
+          } catch (e) {
+            _logs.log('MOVE_CONFIG', '角度儲存失敗：' + e.runtimeType.toString(),
+                level: 'ERROR');
+            _notify('左轉校正設定無法儲存');
+          }
+        },
+      ),
+    ]),
+  );
+
   Widget _controlPage() => _expandedControl ? _expandedControlPage() : ListView(
     padding: const EdgeInsets.all(12),
     children: [
@@ -612,6 +666,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       ),
       const SizedBox(height: 8),
       const Center(child: Text('點按單步；長按連發（最多 12 秒）。放開會停止續發並送停止指令。')),
+      _leftTurnCalibration(),
       // Stable widget position: never unmount the active gesture on state updates.
       Center(child: Text(_holdingDirection ? '● 正在長按移動' : ' ',
           style: const TextStyle(color: Colors.cyanAccent))),

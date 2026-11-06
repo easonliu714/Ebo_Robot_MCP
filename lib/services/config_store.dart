@@ -5,12 +5,14 @@ class PrivateSettings {
   String geminiKey;
   String rtspUrl;
   String actionMap;
+  int leftTurnDegrees;
 
   PrivateSettings({
     this.mcpJson = '',
     this.geminiKey = '',
     this.rtspUrl = '',
     this.actionMap = '',
+    this.leftTurnDegrees = 30,
   });
 }
 
@@ -22,6 +24,7 @@ class ConfigStore {
     geminiKey: await _storage.read(key: 'gemini_key') ?? '',
     rtspUrl: await _storage.read(key: 'rtsp_url') ?? '',
     actionMap: await _storage.read(key: 'action_map') ?? '',
+    leftTurnDegrees: int.tryParse(await _storage.read(key: 'left_turn_degrees') ?? '') ?? 30,
   );
 
   Future<void> save(PrivateSettings settings) async {
@@ -29,5 +32,6 @@ class ConfigStore {
     await _storage.write(key: 'gemini_key', value: settings.geminiKey);
     await _storage.write(key: 'rtsp_url', value: settings.rtspUrl);
     await _storage.write(key: 'action_map', value: settings.actionMap);
+    await _storage.write(key: 'left_turn_degrees', value: settings.leftTurnDegrees.toString());
   }
 }
