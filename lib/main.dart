@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import 'services/action_map.dart';
 import 'services/ebo_tool_catalog.dart';
 import 'screens/ebo_tool_panel.dart';
+import 'screens/ai_conversation_screen.dart';
 import 'services/config_store.dart';
 import 'services/diagnostics.dart';
 import 'services/gemini_service.dart';
@@ -68,7 +69,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
   late final VideoController _video;
 
   int _page = 0;
-  String _version = '0.1.2+3';
+  String _version = '0.2.0+5';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _aiBusy = false;
@@ -553,49 +554,11 @@ class _ControllerScreenState extends State<ControllerScreen> {
     ],
   );
 
-  Widget _aiPage() => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      const Text('Gemini AI 指令', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 6),
-      const Text('AI 每次執行 MCP 工具前都會顯示確認視窗。'
-          '文字與語音共用設定頁中的 Gemini API Key。'),
-      const SizedBox(height: 18),
-      TextField(
-        controller: _input,
-        minLines: 2,
-        maxLines: 4,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          hintText: '例：請機器人向前移動並拍照',
-          labelText: '自然語言指令',
-        ),
-      ),
-      const SizedBox(height: 12),
-      FilledButton.icon(
-        onPressed: _aiBusy ? null : () => _askGemini(),
-        icon: const Icon(Icons.send),
-        label: const Text('傳送文字指令'),
-      ),
-      const SizedBox(height: 12),
-      FilledButton.tonalIcon(
-        onPressed: _aiBusy ? null : _toggleVoice,
-        icon: Icon(_voiceRecording ? Icons.stop_circle : Icons.mic),
-        label: Text(_voiceRecording ? '停止錄音並送出' : '開始錄製語音指令'),
-      ),
-      if (_aiBusy) const Padding(
-        padding: EdgeInsets.all(12),
-        child: LinearProgressIndicator(),
-      ),
-      const SizedBox(height: 18),
-      const Text('AI 回覆', style: TextStyle(fontWeight: FontWeight.bold)),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: SelectableText(_aiAnswer.isEmpty ? '尚無執行結果' : _aiAnswer),
-        ),
-      ),
-    ],
+  Widget _aiPage() => AiConversationScreen(
+    apiKey: _settings.geminiKey,
+    mcp: _mcp,
+    logs: _logs,
+    approve: _approveTool,
   );
 
   Widget _settingsPage() => ListView(
