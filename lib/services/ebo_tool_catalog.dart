@@ -55,6 +55,72 @@ class EboToolCatalog {
     _ => <String, dynamic>{},
   };
 
+
+  /// Display original English property keys alongside these localized names.
+  static const parameterNames = <String, String>{
+    'moveId': '移動動作代碼',
+    'targetDistance': '移動距離／轉向角度',
+    'locationName': '地圖位置名稱',
+    'duration': '巡邏時間（秒）',
+    'song': '歌曲名稱',
+    'singer': '歌手名稱',
+    'text': '文字內容',
+    'startUp': '啟動返回充電座',
+    'mode': '跟隨模式',
+    'trackTarget': '追蹤對象',
+    'objId': '搜尋對象代碼',
+    'recordSeconds': '錄影秒數',
+    'controlType': '音樂控制代碼',
+    'direction': '音量控制代碼',
+    'volume': '音量數值',
+    'lang': '語音語言',
+  };
+  static const parameterHints = <String, String>{
+    'moveId': '1 前進、2 後退、3 左轉、4 右轉、5 停止；其他值依韌體 Schema。',
+    'targetDistance': '前後移動以公尺計，左右轉以角度計；依動作限制。',
+    'locationName': '先查詢地圖位置，再選擇已儲存的位置名稱。',
+    'duration': '單位為秒；0 可能表示無限制，請審慎使用。',
+    'recordSeconds': '指定錄影秒數，不是開始／停止切換。',
+    'startUp': '開啟為返回充電座；關閉為取消返回。',
+    'mode': '0 跟隨、1 鎖定；以工具 Schema 為準。',
+    'trackTarget': '4 人員、3 寵物；以工具 Schema 為準。',
+    'controlType': '1 重播、2 暫停、3 繼續、4 停止、5 下一首、6 上一首。',
+    'direction': '0 設定音量、1 增加、2 減少。',
+    'text': '輸入希望機器人播報或使用的文字。',
+    'lang': '如支援繁體中文，可使用 zh-TW；以 Schema 為準。',
+  };
+  static const numericLabels = <String, Map<int, String>>{
+    'robot_move.moveId': {
+      1: '前進', 2: '後退', 3: '左轉', 4: '右轉', 5: '停止',
+    },
+    'robot_follow.mode': {0: '跟隨', 1: '鎖定'},
+    'robot_follow.trackTarget': {3: '寵物', 4: '人員'},
+    'robot_music_control.controlType': {
+      1: '重播', 2: '暫停', 3: '繼續', 4: '停止', 5: '下一首', 6: '上一首',
+    },
+    'robot_set_volume.direction': {0: '指定音量', 1: '增加', 2: '減少'},
+  };
+  static Map<int, String> numericChoices(String tool, String key) =>
+      numericLabels['$tool.$key'] ?? const <int, String>{};
+
+  static String fieldTitle(String key) => parameterNames[key] ?? key;
+  static String fieldHelp(String key) => parameterHints[key] ??
+      '依實際 MCP Schema 描述設定參數。';
+
+  static String rangeText(String tool, String key, Map<String, dynamic> schema,
+      {int? moveId}) {
+    final min = schema['minimum'];
+    final max = schema['maximum'];
+    if (min is num || max is num) {
+      return '可設定：${min ?? '未指定'} ～ ${max ?? '未指定'}';
+    }
+    if (tool == 'robot_move' && key == 'targetDistance') {
+      if (moveId == 1 || moveId == 2) return '安全限制：0～5 公尺';
+      if (moveId == 3 || moveId == 4) return '安全限制：0～360 度';
+    }
+    return '原廠 Schema 未提供上下限';
+  }
+
   static const _quickDefault = <String, Map<String, dynamic>>{
     'forward': {'moveId': 1, 'targetDistance': 0.2},
     'backward': {'moveId': 2, 'targetDistance': 0.2},
