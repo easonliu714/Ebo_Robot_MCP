@@ -1,7 +1,7 @@
 name: ebo_robot_mcp
 description: Secure EBO robot controller for Android
 publish_to: none
-version: 0.2.1+6
+version: 0.2.2+7
 
 environment:
   sdk: ">=3.10.0 <4.0.0"

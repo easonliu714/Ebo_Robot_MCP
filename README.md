@@ -3,7 +3,7 @@
 EBO-162 Android controller built with Flutter: RTSP live view, manual MCP controls,
 Gemini AI text/voice commands, and redacted exportable diagnostic logs.
 
-**Current version: 0.2.1+6 — development preview, hardware not yet verified.**
+**Current version: 0.2.2+7 — development preview, hardware not yet verified.**
 
 ## First start
 
@@ -52,7 +52,7 @@ Flutter template icon and generates both legacy and adaptive Android launcher
 resources. Android launchers may cache the prior icon; restart the launcher or
 reinstall the signed app if necessary.
 
-## AI conversation, favorites and spoken answers (v0.2.1)
+## AI conversation, favorites and spoken answers (v0.2.2)
 
 The AI tab keeps the latest 60 messages encrypted locally. Long-press a user
 message to add/remove it from favorite quick commands; tapping a favorite resends
@@ -84,7 +84,7 @@ inventing unsupported choices. The navigation form can query
 ## APK builds
 
 GitHub Actions → Android APK → successful run → Artifacts → APK.
-Filename: EBO-v0.2.1-buildN-debug.apk; internal version is 0.2.1+N.
+Filename: EBO-v0.2.2-buildN-debug.apk; internal version is 0.2.2+N.
 
 The build number follows GitHub Actions run number. On every source release
 update pubspec.yaml, CHANGELOG.md, and the build-name in android.yml.
@@ -133,7 +133,7 @@ downloadable MP4 in this app. Local snapshots can be shared as PNG.
 Only one MCP client is used inside the app; close other external clients
 before connecting if the EBO backend enforces a one-client restriction.
 
-## v0.2.1: RTSP and safe held-direction control
+## v0.2.2: RTSP and safe held-direction control
 
 Entering Monitor/Control from a different tab, or resuming the app while
 showing video, requests **one** RTSP reconnect. No persistent foreground
@@ -157,3 +157,24 @@ AI now has separate controls for:
   factual answering; speech questions first use a transcription-only API
   call with **no** MCP tool declarations, then Search, then approved
   `robot_speak`. No ungrounded weather answers get spoken automatically.
+
+## v0.2.2: AI plans vs. actual MCP actions
+
+Gemini's ordinary prose is **not an MCP action**. The client now explicitly
+reports `【未執行 MCP】` if an action request returns no functionCall, rather
+than treating an AI-written plan as success. Failed API calls show a redacted
+HTTP status/status enum in the JSONL Log (no secret request body).
+
+A deliberately scoped **first-stage** command planner uses an *explicit*
+user-written notebook entry such as `尾牙是家裡的寵物貓` to resolve a new
+request like `在家裡巡邏尋找尾牙、拍照並跟隨他5分鐘`. It confirms and
+calls `robot_patrol(duration=120, objId="2", targetName="尾牙")` only when
+the live tool Schema matches. The returned reply explicitly marks photo and
+five-minute follow **not executed** pending verified detection and a safe
+follow-stop mechanism. There is no invented auto-detection or hidden delayed
+execution. A cancelled confirmation sends no MCP request.
+
+The Control page now has a **left-turn calibration** dropdown: 15, 30, or
+45 degrees per press/repeated step. Default is 30 degrees; right remains 15
+degrees. MCP logs show requested angle, direction and response latency, not
+private keys. Test in an open area before adopting larger angles.

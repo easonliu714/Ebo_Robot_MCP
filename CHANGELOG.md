@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2+7 — 2026-11-06
+
+- Add local left-turn calibration (15° / 30° / 45°, initial 30°) to compensate for weak left response seen in real-device tests. Apply to both tap and hold; preserve right rotation at 15° and 0.2 m movement steps. Save choice securely on device and log effective angle, RPC completion time and direction.
+- Resolve user-owned named-cat memory for explicit whole-house patrol/search commands. Example: a saved note "尾牙是家裡的寵物貓" + a new "在家巡邏尋找尾牙..." request becomes a verified, approval-gated `robot_patrol` call with `duration=120`, `objId="2"`, `targetName="尾牙"`. An explicitly requested patrol duration is capped at five minutes.
+- Split the first executable patrol/search stage from deferred photo/follow stages. Do not claim the cat is found or automatically start follow/photography without a reliable detection signal; current EBO MCP does not provide a validated timed-stop follow control.
+- Distinguish a text-only Gemini response from real MCP function calls. For physical intents without functionCall, show a prominent "未執行 MCP" reply and log an `AI_NO_TOOL` event. Never present narrative plans as completed operations.
+- Log sanitized Gemini HTTP error statuses such as 429/RESOURCE_EXHAUSTED while excluding API keys, prompts and response bodies; preserve useful failure feedback in on-device conversation.
+- Add BDD tests for memory-based task plans, approval denial, honest no-functionCall results, sanitized HTTP status and turning calibration.
+- Preserve all established features, launcher icon, JKS signing, favorites, encrypted conversation and credentials.
+
+
 ## 0.2.1+6 — 2026-11-06
 
 - On entry to Monitor/Control or return from background on a video tab, request a fresh RTSP open exactly once. Do not auto-poll during an uninterrupted foreground video session; retain manual refresh and log failures.
