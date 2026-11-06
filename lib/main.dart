@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'services/action_map.dart';
@@ -18,7 +16,6 @@ import 'screens/ebo_tool_panel.dart';
 import 'screens/ai_conversation_screen.dart';
 import 'services/config_store.dart';
 import 'services/diagnostics.dart';
-import 'services/gemini_service.dart';
 import 'services/mcp_service.dart';
 
 void main() {
@@ -57,11 +54,8 @@ class ControllerScreen extends StatefulWidget {
 class _ControllerScreenState extends State<ControllerScreen> {
   final _store = ConfigStore();
   final _mcp = McpClient();
-  final _agent = GeminiAgent();
   final _logs = Diagnostics();
   final _actionMap = ActionMap();
-  final _recorder = AudioRecorder();
-  final _input = TextEditingController();
   final _mcpInput = TextEditingController();
   final _keyInput = TextEditingController();
   final _rtspInput = TextEditingController();
@@ -72,10 +66,7 @@ class _ControllerScreenState extends State<ControllerScreen> {
   String _version = '0.2.0+5';
   bool _connecting = false;
   bool _videoRequested = false;
-  bool _aiBusy = false;
   bool _commandBusy = false;
-  bool _voiceRecording = false;
-  String _aiAnswer = '';
   PrivateSettings _settings = PrivateSettings();
 
   @override
@@ -270,70 +261,6 @@ class _ControllerScreenState extends State<ControllerScreen> {
     } catch (e) {
       _logs.log('PHOTO', '本地截圖失敗：' + e.runtimeType.toString(), level: 'ERROR');
       _notify('截圖失敗，請確認 RTSP 已顯示畫面');
-    }
-  }
-
-  Future<void> _askGemini({List<int>? audio}) async {
-    if (_aiBusy) return;
-    final text = _input.text.trim();
-    if (audio == null && text.isEmpty) return;
-    setState(() => _aiBusy = true);
-    _logs.log('AI', audio == null ? '收到文字命令（不記錄內容）' : '收到語音命令（不保存音檔）');
-    try {
-      final answer = audio == null
-          ? await _agent.runText(
-              apiKey: _settings.geminiKey,
-              prompt: text,
-              mcp: _mcp,
-              approve: _approveTool,
-              onStep: (v) => _logs.log('AI', v))
-          : await _agent.runAudio(
-              apiKey: _settings.geminiKey,
-              bytes: Uint8List.fromList(audio),
-              mcp: _mcp,
-              approve: _approveTool,
-              onStep: (v) => _logs.log('AI', v));
-      if (!mounted) return;
-      setState(() => _aiAnswer = answer);
-      _logs.log('AI', '模型回覆成功（不記錄回覆內容）');
-      if (audio == null) _input.clear();
-    } catch (e) {
-      _logs.log('AI', 'AI 執行失敗：' + e.toString(), level: 'ERROR');
-      _notify('AI 執行失敗，請匯出診斷紀錄');
-    } finally {
-      if (mounted) setState(() => _aiBusy = false);
-    }
-  }
-
-  Future<void> _toggleVoice() async {
-    if (_aiBusy) return;
-    try {
-      if (!_voiceRecording) {
-        if (!await _recorder.hasPermission()) {
-          _notify('請授予麥克風權限');
-          return;
-        }
-        final dir = await getTemporaryDirectory();
-        await _recorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: dir.path + '/ebo_voice.m4a',
-        );
-        if (mounted) setState(() => _voiceRecording = true);
-        _logs.log('VOICE', '開始錄音');
-      } else {
-        final path = await _recorder.stop();
-        if (mounted) setState(() => _voiceRecording = false);
-        if (path == null) throw const FormatException('未取得錄音檔');
-        final file = File(path);
-        final bytes = await file.readAsBytes();
-        await file.delete();
-        _logs.log('VOICE', '已停止錄音並刪除暫存檔');
-        await _askGemini(audio: bytes);
-      }
-    } catch (e) {
-      if (mounted) setState(() => _voiceRecording = false);
-      _logs.log('VOICE', '語音功能錯誤：' + e.runtimeType.toString(), level: 'ERROR');
-      _notify('語音錄製或傳送失敗');
     }
   }
 
@@ -746,15 +673,12 @@ class _ControllerScreenState extends State<ControllerScreen> {
 
   @override
   void dispose() {
-    _input.dispose();
     _mcpInput.dispose();
     _keyInput.dispose();
     _rtspInput.dispose();
     _logs.dispose();
     unawaited(_mcp.disconnect().whenComplete(_mcp.dispose));
-    _agent.dispose();
     unawaited(_player.dispose());
-    unawaited(_recorder.dispose());
     super.dispose();
   }
 }
