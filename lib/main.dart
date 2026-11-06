@@ -149,6 +149,9 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   Future<void> _connectMcp() async {
     if (_connecting) return;
+    // End a held move before replacing the single MCP session.
+    if (_heldMove.active) await _heldMove.end();
+    if (!mounted) return;
     setState(() => _connecting = true);
     _logs.log('MCP', '開始初始化 MCP Session');
     try {
@@ -224,6 +227,9 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   }
 
   Future<void> _saveSettings() async {
+    // Credentials/session changes must not strand a repeating movement.
+    if (_heldMove.active) await _heldMove.end();
+    if (!mounted) return;
     final newSettings = PrivateSettings(
       mcpJson: _mcpInput.text.trim(),
       geminiKey: _keyInput.text.trim(),
