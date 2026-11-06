@@ -10,6 +10,7 @@ import '../services/action_map.dart';
 import '../services/ai_notebook.dart';
 import '../services/diagnostics.dart';
 import '../services/gemini_service.dart';
+import '../services/ebo_task_planner.dart';
 import '../services/mcp_service.dart';
 import 'ai_conversation_panel.dart';
 
@@ -73,29 +74,48 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       await _notebook.addMessage('user',
           audio == null ? prompt : '🎙️ 由手機錄音輸入語音指令');
       if (mounted) setState(() {});
-      final response = audio == null
-          ? await _agent.runText(
-              apiKey: widget.apiKey,
-              prompt: prompt,
-              contextNotes: previousContext,
+      // User-approved named-pet memory can resolve an explicit cat-patrol
+      // command deterministically. Only the first verifiable stage executes.
+      final plan = audio == null
+          ? EboTaskPlan.fromPrompt(prompt, _notebook.notes) : null;
+      final response = plan != null
+          ? await plan.startPatrol(
               mcp: widget.mcp,
               approve: widget.approve,
-              onStep: (v) => widget.logs.log('AI', v),
+              onStep: (v) => widget.logs.log('AI_PLAN', v),
             )
-          : await _agent.runAudio(
-              apiKey: widget.apiKey,
-              bytes: audio,
-              contextNotes: previousContext,
-              mcp: widget.mcp,
-              approve: widget.approve,
-              onStep: (v) => widget.logs.log('AI', v),
-            );
+          : audio == null
+            ? await _agent.runText(
+                apiKey: widget.apiKey,
+                prompt: prompt,
+                contextNotes: previousContext,
+                mcp: widget.mcp,
+                approve: widget.approve,
+                onStep: (v) => widget.logs.log('AI', v),
+              )
+            : await _agent.runAudio(
+                apiKey: widget.apiKey,
+                bytes: audio,
+                contextNotes: previousContext,
+                mcp: widget.mcp,
+                approve: widget.approve,
+                onStep: (v) => widget.logs.log('AI', v),
+              );
       await _notebook.addMessage('assistant', response);
       widget.logs.log('AI', 'AI 回答已加密保存至手機');
       if (mounted) setState(() {});
     } catch (e) {
-      widget.logs.log('AI', '一般對話失敗：${e.runtimeType}', level: 'ERROR');
-      _notify('AI 指令失敗，請匯出 Log');
+      final summary = e is GeminiApiException
+          ? 'Gemini HTTP ' + e.statusCode.toString() +
+              ' API_STATUS=' + e.apiStatus
+          : e is McpException
+              ? 'MCP request failure: ' + Redactor.clean(e.message)
+              : e.runtimeType.toString();
+      widget.logs.log('AI', '一般對話失敗：' + summary, level: 'ERROR');
+      await _notebook.addMessage('assistant',
+          '這次沒有確認任何新的 MCP 動作。指令失敗：' + summary);
+      if (mounted) setState(() {});
+      _notify('AI/MCP 指令未完成：' + summary);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
