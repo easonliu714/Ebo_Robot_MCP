@@ -37,7 +37,7 @@ class AiConversationScreen extends StatefulWidget {
   State<AiConversationScreen> createState() => _AiConversationScreenState();
 }
 
-class _AiConversationScreenState extends State<AiConversationScreen> {
+class _AiConversationScreenState extends State<AiConversationScreen> with WidgetsBindingObserver {
   final _notebook = AiNotebook();
   final _agent = GeminiAgent();
   final _recorder = AudioRecorder();
@@ -49,6 +49,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetVoice());
   }
@@ -67,6 +68,22 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     if (mode != 'voice_qa' && mode != 'voice_mcp') return;
     widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode.toString());
     unawaited(_toggleVoice(groundedQuestion: mode == 'voice_qa'));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed || !_recording) return;
+    // Privacy/safety: do not continue recording if screen is backgrounded.
+    unawaited(_recorder.stop().then((_) {
+      if (mounted) setState(() {
+        _recording = false;
+        _recordingGroundedQuestion = false;
+      });
+      widget.logs.log('WIDGET', 'App 進入背景：停止錄音，不送出指令');
+    }).catchError((Object e) {
+      widget.logs.log('WIDGET', '背景停止錄音失敗：' +
+          e.runtimeType.toString(), level: 'ERROR');
+    }));
   }
 
   Future<void> _load() async {
@@ -416,6 +433,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _input.dispose();
     _recorder.dispose();
     _agent.dispose();

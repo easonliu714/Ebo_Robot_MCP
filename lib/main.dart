@@ -248,6 +248,12 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   void _selectPage(int target) {
     final previous = _page;
     if (previous == target) return;
+    // A home-screen launch request is single-use: manual re-entry must never
+    // trigger another microphone capture without a fresh widget tap.
+    if (previous == 2 && target != 2) {
+      _widgetVoiceRequest = 0;
+      _widgetVoiceMode = null;
+    }
     if (previous == 1) {
       ++_joystickEpoch;
       _joystickContact = false;
