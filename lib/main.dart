@@ -811,7 +811,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       const Center(child: Text('點按單步；長按連發（最多 12 秒）。放開會停止續發並送停止指令。')),
       _leftTurnCalibration(),
       // Stable widget position: never unmount the active gesture on state updates.
-      Center(child: Text(_holdingDirection ? '● 正在長按移動' : ' ',
+      Center(child: Text(_holdingDirection ? '● 連續控制：${_heldDirection ?? "未知方向"}' : ' ',
           style: const TextStyle(color: Colors.cyanAccent))),
       const SizedBox(height: 8),
       Center(child: _joystick()),
