@@ -17,6 +17,7 @@ class HoldMoveController {
   String? _action;
   int _epoch = 0;
   int _stepCount = 0;
+  int _limit = 12;
   Timer? _watchdog;
 
   HoldMoveController({
@@ -32,11 +33,12 @@ class HoldMoveController {
   bool get active => _active;
   String? get action => _action;
 
-  void start(String action) {
+  void start(String action, {int? maxSteps}) {
     if (_active) return;
     _active = true;
     _action = action;
     _stepCount = 0;
+    _limit = maxSteps == null ? this.maxSteps : maxSteps.clamp(1, this.maxSteps);
     final epoch = ++_epoch;
     onState(true, action);
     _watchdog?.cancel();
@@ -45,7 +47,7 @@ class HoldMoveController {
   }
 
   Future<void> _run(int epoch, String action) async {
-    while (_active && epoch == _epoch && _stepCount < maxSteps) {
+    while (_active && epoch == _epoch && _stepCount < _limit) {
       _stepCount++;
       try {
         await sendStep(action); // one call at a time; no backlog
@@ -55,7 +57,7 @@ class HoldMoveController {
         return;
       }
       if (!_active || epoch != _epoch) return;
-      if (_stepCount == maxSteps) {
+      if (_stepCount == _limit) {
         await end();
         return;
       }
