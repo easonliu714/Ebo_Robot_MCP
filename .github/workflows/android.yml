@@ -42,8 +42,18 @@ jobs:
           fi
       - name: Configure Android permissions and signing
         run: dart run scripts/configure_android.dart
+      - name: Install Android home voice widgets
+        run: |
+          dart run scripts/install_android_widgets.dart
+          test -s android/app/src/main/kotlin/com/easonliu714/ebo_robot_mcp/EboVoiceWidgets.kt
+          test -s android/app/src/main/res/xml/ebo_voice_dual_info.xml
       - name: Dependencies
         run: flutter pub get
+      - name: Generate enlarged launcher icon without wireless waves
+        run: |
+          python3 -m pip install --quiet --target .ci-python Pillow
+          PYTHONPATH="$PWD/.ci-python" python3 scripts/render_launcher_icon.py
+          test -s assets/icon/ebo_launcher_v2.png
       - name: Install EBO robot launcher icon (legacy + adaptive)
         run: |
           dart run flutter_launcher_icons
@@ -60,18 +70,18 @@ jobs:
         run: flutter test
       - name: Build test APK
         run: |
-          flutter build apk --debug --build-name=0.2.2 --build-number="$GITHUB_RUN_NUMBER"
+          flutter build apk --debug --build-name=0.2.3 --build-number="$GITHUB_RUN_NUMBER"
           mkdir -p artifacts
-          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.2-build$GITHUB_RUN_NUMBER-debug.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.3-build$GITHUB_RUN_NUMBER-debug.apk"
       - name: Build signed release APK if configured
         if: steps.signing.outputs.release == 'true' && github.event_name != 'pull_request'
         run: |
-          flutter build apk --release --build-name=0.2.2 --build-number="$GITHUB_RUN_NUMBER"
-          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.2-build$GITHUB_RUN_NUMBER-release.apk"
+          flutter build apk --release --build-name=0.2.3 --build-number="$GITHUB_RUN_NUMBER"
+          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.3-build$GITHUB_RUN_NUMBER-release.apk"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EBO-Android-v0.2.2-build${{ github.run_number }}
+          name: EBO-Android-v0.2.3-build${{ github.run_number }}
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error

@@ -178,3 +178,27 @@ The Control page now has a **left-turn calibration** dropdown: 15, 30, or
 45 degrees per press/repeated step. Default is 30 degrees; right remains 15
 degrees. MCP logs show requested angle, direction and response latency, not
 private keys. Test in an open area before adopting larger angles.
+
+## v0.2.3: Eight-way circular pad and Android voice home widgets
+
+The Control page replaces the cross D-pad with a responsive circular touchpad.
+Tap a sector for one safe step; hold for bounded repeat; release/center to
+request stop. Diagonal sectors use **sequential** turn 7° + translate 0.1 m
+because `robot_move` has no simultaneous linear/angular control interface.
+This is not a guarantee of collision avoidance or exact robot odometry.
+MCP acknowledgements are not physical-motion sensor feedback.
+
+Three native **Android home-screen widgets** are available:
+`EBO 語音查詢` (Google Search grounding → approval → EBO speak),
+`EBO 語音指令` (Gemini function calling → MCP with confirmation), and
+`EBO 雙語音控制` (both buttons). Long-press an empty Android home-screen
+area → Widgets/小工具 → EBO Robot MCP → select a widget. A tap opens the
+app in the foreground and begins microphone recording only after Android
+permission is granted. Tap the voice button again to submit. App closed or
+no network/MCP means no robot action; widgets do not keep the microphone
+active in the background.
+
+The launcher no longer shows Wi-Fi arcs. CI renders its original robot and
+controller shapes at 1.5× scale using
+`python3 scripts/render_launcher_icon.py`, then installs both Android icon
+formats. Committed original art remains available for reproducibility.

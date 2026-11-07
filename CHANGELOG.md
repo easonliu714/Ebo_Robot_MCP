@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3+8 — 2026-11-07
+
+- Replace the four-button D-pad with an eight-sector circular pad in the Control page and enlarged semi-transparent RTSP overlay. Tap means one step, hold means bounded repeat; center requests STOP.
+- Because robot_move exposes only one moveId per call, diagonal sectors are documented and implemented as sequential 7-degree turns + 0.1-meter translations (not simultaneous linear/angular velocity). A held diagonal allows at most six pairs, with one request in flight and automatic STOP on release/background/tab exit/timeout.
+- Emit safe JOYSTICK JSONL events with actual moveId, targetDistance, angleSpeed, playTime, step position, and RPC response duration. A server success cannot prove the actual physical angle, so field calibration is still required.
+- Redesign Android launcher from the approved cyan robot/controller art: remove the three radio-wave arcs and enlarge the remaining artwork 1.5x. Generate 1024px PNG reproducibly during CI and install adaptive/legacy icons.
+- Add native Android home-screen voice widgets: compact voice Q&A, compact voice MCP control, and combined two-action widget. A widget tap foregrounds the app and activates the selected microphone mode with Android permission checks. It never stores secrets in the widget or performs robot actions in the background; physical MCP actions still require approval.
+- Keep encrypted settings, Gemini/MCP keys, RTSP monitoring, favorites, notebook and permanent signing.
+
+
 ## 0.2.2+7 — 2026-11-06
 
 - Add local left-turn calibration (15° / 30° / 45°, initial 30°) to compensate for weak left response seen in real-device tests. Apply to both tap and hold; preserve right rotation at 15° and 0.2 m movement steps. Save choice securely on device and log effective angle, RPC completion time and direction.
