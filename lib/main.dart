@@ -20,6 +20,8 @@ import 'services/mcp_service.dart';
 import 'services/video_tab_policy.dart';
 import 'services/hold_move_controller.dart';
 import 'services/move_step_policy.dart';
+import 'services/joystick_policy.dart';
+import 'widgets/robot_joystick.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,13 +70,15 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   StreamSubscription<String>? _rtspErrorSubscription;
 
   int _page = 0;
-  String _version = '0.2.2+7';
+  String _version = '0.2.3+8';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _streamConnecting = false;
   bool _expandedControl = false;
   bool _holdingDirection = false;
   String? _heldDirection;
+  int _joystickEpoch = 0;
+  bool _joystickContact = false;
   bool _commandBusy = false;
   PrivateSettings _settings = PrivateSettings();
 
@@ -207,7 +211,11 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   void _selectPage(int target) {
     final previous = _page;
     if (previous == target) return;
-    if (previous == 1) unawaited(_heldMove.end());
+    if (previous == 1) {
+      ++_joystickEpoch;
+      _joystickContact = false;
+      unawaited(_heldMove.end());
+    }
     setState(() {
       _page = target;
       if (target != 1) _expandedControl = false;
@@ -220,7 +228,11 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) unawaited(_heldMove.end());
+    if (state != AppLifecycleState.resumed) {
+      ++_joystickEpoch;
+      _joystickContact = false;
+      unawaited(_heldMove.end());
+    }
     if (state == AppLifecycleState.resumed &&
         VideoTabPolicy.shouldResumeStream(_page) &&
         _settings.rtspUrl.isNotEmpty) {
@@ -341,20 +353,33 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   bool _canHoldDirection(String action) {
     if (_commandBusy || _holdingDirection || !_mcp.connected) return false;
-    final binding = _actionMap[action];
     final stop = _actionMap['stop'];
-    if (binding?.tool != 'robot_move' ||
-        stop?.tool != 'robot_move' ||
-        binding?.args['moveId'] != _moveIds[action] ||
-        stop?.args['moveId'] != 5) {
-      return false;
-    }
     final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
-    if (tool == null) return false;
+    if (stop?.tool != 'robot_move' ||
+        stop?.args['moveId'] != 5 || tool == null) return false;
+    final steps = JoystickPolicy.isDiagonal(action)
+        ? JoystickPolicy.diagonalSteps(action)
+        : <JoystickMove>[
+            JoystickMove(_moveIds[action] ?? -1, MoveStepPolicy.distance(
+                action, leftAngle: _settings.leftTurnDegrees))
+          ];
     try {
-      ActionMap.validateArguments(tool,
-          {...binding!.args,
-           'targetDistance': MoveStepPolicy.distance(action, leftAngle: _settings.leftTurnDegrees)});
+      for (final step in steps) {
+        final mapping = switch (step.moveId) {
+          1 => 'forward', 2 => 'backward',
+          3 => 'left', 4 => 'right', _ => '',
+        };
+        final binding = _actionMap[mapping];
+        if (binding?.tool != 'robot_move' ||
+            binding?.args['moveId'] != step.moveId) return false;
+        final args = Map<String, dynamic>.from(binding!.args)
+          ..['targetDistance'] = step.targetDistance;
+        if (JoystickPolicy.isDiagonal(action)) {
+          args['angleSpeed'] = 1;
+          args['playTime'] = 1;
+        }
+        ActionMap.validateArguments(tool, args);
+      }
       ActionMap.validateArguments(tool, stop!.args);
       return true;
     } catch (_) {
@@ -368,10 +393,15 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       return;
     }
     _logs.log('MOVE_HOLD', '開始長按連續控制：$action（最長 12 秒）');
-    _heldMove.start(action);
+    _heldMove.start(action,
+        maxSteps: JoystickPolicy.isDiagonal(action) ? 6 : 12);
   }
 
   Future<void> _sendHeldMoveStep(String action) async {
+    if (JoystickPolicy.isDiagonal(action)) {
+      await _sendDiagonalPair(action, held: true);
+      return;
+    }
     final binding = _actionMap[action];
     final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
     if (binding == null || tool == null || !_mcp.connected ||
@@ -392,6 +422,111 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
         args['targetDistance'].toString() +
         ' elapsedMs=' + elapsed.elapsedMilliseconds.toString());
   }
+
+  /// A diagonal is NOT native simultaneous velocity control. Each step pair
+  /// is turn (7°) then translation (0.1 m), serialized through MCP.
+  Future<void> _sendDiagonalPair(String action, {required bool held}) async {
+    if (!_mcp.connected) throw const McpException('MCP 尚未連線');
+    final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
+    if (tool == null) throw const FormatException('缺少 robot_move');
+    final steps = JoystickPolicy.diagonalSteps(action);
+    final queued = <Map<String, dynamic>>[];
+    for (final step in steps) {
+      final mapping = switch (step.moveId) {
+        1 => 'forward', 2 => 'backward',
+        3 => 'left', 4 => 'right', _ => '',
+      };
+      final bound = _actionMap[mapping];
+      if (bound?.tool != 'robot_move' ||
+          bound?.args['moveId'] != step.moveId) {
+        throw const FormatException('斜向控制的動作映射不符合原廠工具');
+      }
+      final args = Map<String, dynamic>.from(bound!.args)
+        ..['moveId'] = step.moveId
+        ..['targetDistance'] = step.targetDistance
+        ..['angleSpeed'] = 1
+        ..['playTime'] = 1;
+      ActionMap.validateArguments(tool, args);
+      queued.add(args);
+    }
+    for (var i = 0; i < queued.length; i++) {
+      if (held && !_heldMove.active) {
+        _logs.log('JOYSTICK', '觸控放開後，取消未送出的斜向後續步驟');
+        return;
+      }
+      final args = queued[i];
+      final clock = Stopwatch()..start();
+      await _mcp.call('robot_move', args);
+      clock.stop();
+      _logs.log('JOYSTICK', '斜向=' + action +
+          ' stage=' + (i + 1).toString() + '/' + queued.length.toString() +
+          ' moveId=' + args['moveId'].toString() +
+          ' targetDistance=' + args['targetDistance'].toString() +
+          ' angleSpeed=1 playTime=1 elapsedMs=' +
+          clock.elapsedMilliseconds.toString() +
+          '（MCP 已回應，未確認實際旋轉或位移）');
+    }
+  }
+
+  Future<void> _joystickTap(String action) async {
+    if (action == 'stop') {
+      ++_joystickEpoch;
+      _joystickContact = false;
+      if (_heldMove.active) await _heldMove.end();
+      await _robotAction('stop');
+      return;
+    }
+    if (!JoystickPolicy.isDiagonal(action)) {
+      await _robotAction(action);
+      return;
+    }
+    if (!_canHoldDirection(action)) {
+      _notify('斜向控制須先有正確的四方向與停止工具映射');
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _commandBusy = true);
+    try {
+      await _sendDiagonalPair(action, held: false);
+    } catch (e) {
+      _logs.log('JOYSTICK', '斜向單次指令異常：' +
+          e.runtimeType.toString(), level: 'ERROR');
+      _notify('斜向動作未完成，請查看 Log');
+    } finally {
+      if (mounted) setState(() => _commandBusy = false);
+    }
+  }
+
+  void _joystickHoldStart(String action) {
+    _joystickContact = true;
+    _beginHoldDirection(action);
+  }
+
+  void _joystickHoldChange(String? action) {
+    final epoch = ++_joystickEpoch;
+    _joystickContact = action != null;
+    unawaited(() async {
+      if (_heldMove.active) await _heldMove.end();
+      if (!mounted || !_joystickContact || epoch != _joystickEpoch ||
+          action == null || !_canHoldDirection(action)) return;
+      _beginHoldDirection(action);
+    }());
+  }
+
+  void _joystickHoldEnd() {
+    _joystickContact = false;
+    ++_joystickEpoch;
+    unawaited(_heldMove.end());
+  }
+
+  Widget _joystick({double size = 228}) => RobotJoystick(
+    size: size,
+    enabled: _mcp.connected && !_commandBusy,
+    onTapAction: _joystickTap,
+    onHoldStart: _joystickHoldStart,
+    onHoldChange: _joystickHoldChange,
+    onHoldEnd: _joystickHoldEnd,
+  );
 
   Future<void> _sendHeldStop() async {
     final stop = _actionMap['stop'];
@@ -671,15 +806,10 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       Center(child: Text(_holdingDirection ? '● 正在長按移動' : ' ',
           style: const TextStyle(color: Colors.cyanAccent))),
       const SizedBox(height: 8),
-      Center(child: Column(children: [
-        _directionButton('forward', Icons.keyboard_arrow_up),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          _directionButton('left', Icons.keyboard_arrow_left),
-          _directionButton('stop', Icons.stop_circle),
-          _directionButton('right', Icons.keyboard_arrow_right),
-        ]),
-        _directionButton('backward', Icons.keyboard_arrow_down),
-      ])),
+      Center(child: _joystick()),
+      const SizedBox(height: 4),
+      const Center(child: Text('八方向圓盤：斜向為轉向 7°＋移動 0.1m，依序執行，不是同步速度控制。',
+          textAlign: TextAlign.center, style: TextStyle(fontSize: 12))),
       const SizedBox(height: 8),
       Wrap(spacing: 8, children: [
         OutlinedButton.icon(
@@ -733,13 +863,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
             border: Border.all(color: Colors.white38),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _directionButton('forward', Icons.keyboard_arrow_up),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _directionButton('left', Icons.keyboard_arrow_left),
-              _directionButton('stop', Icons.stop_circle),
-              _directionButton('right', Icons.keyboard_arrow_right),
-            ]),
-            _directionButton('backward', Icons.keyboard_arrow_down),
+            Center(child: _joystick(size: 194)),
             const SizedBox(height: 6),
             Wrap(alignment: WrapAlignment.center, spacing: 8, children: [
               IconButton.filledTonal(
@@ -961,6 +1085,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   @override
   void dispose() {
+    ++_joystickEpoch;
+    _joystickContact = false;
     WidgetsBinding.instance.removeObserver(this);
     if (_heldMove.active) unawaited(_heldMove.end());
     _heldMove.dispose();
