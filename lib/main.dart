@@ -760,35 +760,6 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     ],
   );
 
-  /// Tap: one move. Long press: bounded repeated steps until release.
-  Widget _directionButton(String action, IconData icon) {
-    final isStop = action == 'stop';
-    final isHeld = _heldDirection == action;
-    return SizedBox(
-      width: 95, height: 62,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _robotAction(action),
-        onLongPressStart: isStop ? null : (_) => _beginHoldDirection(action),
-        onLongPressEnd: isStop ? null : (_) => unawaited(_heldMove.end()),
-        onLongPressCancel: isStop ? null : () => unawaited(_heldMove.end()),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: isStop ? const Color(0xCC862B2B) :
-                isHeld ? const Color(0xCC147C8B) : const Color(0xB03E5D68),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isHeld ? Colors.cyanAccent : Colors.white38),
-          ),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, size: 24),
-            Text(isStop ? '停止' : (isHeld ? '連發中' : (robotActions[action] ?? action)),
-              style: const TextStyle(fontSize: 11)),
-          ]),
-        ),
-      ),
-    );
-  }
-
   Widget _leftTurnCalibration() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     child: Row(children: [

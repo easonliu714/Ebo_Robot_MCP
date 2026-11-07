@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -64,7 +65,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     if (!mounted || widget.voiceRequestId == 0 || _busy || _recording) return;
     final mode = widget.widgetVoiceMode;
     if (mode != 'voice_qa' && mode != 'voice_mcp') return;
-    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode);
+    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode.toString());
     unawaited(_toggleVoice(groundedQuestion: mode == 'voice_qa'));
   }
 
