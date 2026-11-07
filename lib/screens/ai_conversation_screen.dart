@@ -20,12 +20,16 @@ class AiConversationScreen extends StatefulWidget {
   final McpClient mcp;
   final Diagnostics logs;
   final ApproveTool approve;
+  final String? widgetVoiceMode;
+  final int voiceRequestId;
   const AiConversationScreen({
     super.key,
     required this.apiKey,
     required this.mcp,
     required this.logs,
     required this.approve,
+    this.widgetVoiceMode,
+    this.voiceRequestId = 0,
   });
 
   @override
@@ -45,6 +49,23 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetVoice());
+  }
+
+  @override
+  void didUpdateWidget(covariant AiConversationScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.voiceRequestId != widget.voiceRequestId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetVoice());
+    }
+  }
+
+  void _consumeWidgetVoice() {
+    if (!mounted || widget.voiceRequestId == 0 || _busy || _recording) return;
+    final mode = widget.widgetVoiceMode;
+    if (mode != 'voice_qa' && mode != 'voice_mcp') return;
+    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode);
+    unawaited(_toggleVoice(groundedQuestion: mode == 'voice_qa'));
   }
 
   Future<void> _load() async {

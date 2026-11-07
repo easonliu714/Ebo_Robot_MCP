@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -57,6 +58,7 @@ class ControllerScreen extends StatefulWidget {
 }
 
 class _ControllerScreenState extends State<ControllerScreen> with WidgetsBindingObserver {
+  static const MethodChannel _widgetChannel = MethodChannel('ebo_robot_mcp/widget');
   final _store = ConfigStore();
   final _mcp = McpClient();
   final _logs = Diagnostics();
@@ -70,6 +72,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   StreamSubscription<String>? _rtspErrorSubscription;
 
   int _page = 0;
+  int _widgetVoiceRequest = 0;
+  String? _widgetVoiceMode;
   String _version = '0.2.3+8';
   bool _connecting = false;
   bool _videoRequested = false;
@@ -116,7 +120,40 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
           level: 'ERROR');
       return false;
     };
+    _widgetChannel.setMethodCallHandler((call) async {
+      if (call.method == 'widgetAction') {
+        _handleWidgetTarget(call.arguments?.toString());
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_readInitialWidgetTarget());
+    });
     unawaited(_initialize());
+  }
+
+  Future<void> _readInitialWidgetTarget() async {
+    try {
+      final mode = await _widgetChannel.invokeMethod<String>(
+          'getInitialWidgetTarget');
+      _handleWidgetTarget(mode);
+    } on MissingPluginException {
+      // Non-Android platform or Flutter unit tests: no widget channel.
+    } catch (e) {
+      _logs.log('WIDGET', '無法取得桌面小工具入口：' +
+          e.runtimeType.toString(), level: 'WARN');
+    }
+  }
+
+  void _handleWidgetTarget(String? mode) {
+    if (!mounted || (mode != 'voice_qa' && mode != 'voice_mcp')) return;
+    _selectPage(2);
+    setState(() {
+      _widgetVoiceMode = mode;
+      _widgetVoiceRequest++;
+    });
+    _logs.log('WIDGET', 'Android 桌面啟動 ' +
+        (mode == 'voice_qa' ? '語音查詢' : '語音指令') +
+        '；僅在 App 前景啟用錄音');
   }
 
   Future<void> _initialize() async {
@@ -898,6 +935,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     mcp: _mcp,
     logs: _logs,
     approve: _approveTool,
+    widgetVoiceMode: _widgetVoiceMode,
+    voiceRequestId: _widgetVoiceRequest,
   );
 
   Widget _settingsPage() => ListView(
@@ -1088,6 +1127,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     ++_joystickEpoch;
     _joystickContact = false;
     WidgetsBinding.instance.removeObserver(this);
+    _widgetChannel.setMethodCallHandler(null);
     if (_heldMove.active) unawaited(_heldMove.end());
     _heldMove.dispose();
     unawaited(_rtspErrorSubscription?.cancel() ?? Future<void>.value());
