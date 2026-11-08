@@ -7,7 +7,9 @@ void main() {
     expect(EboWidgetQuickCommand.resolve('quick_photo', []).tool, 'robot_take_photo');
     final patrol = EboWidgetQuickCommand.resolve('quick_patrol', []);
     expect(patrol.tool, 'robot_patrol');
-    expect(patrol.arguments, {'duration': 120, 'objId': '', 'targetName': ''});
+    // Generic patrol must not pretend to search an unnamed target.
+    expect(patrol.arguments.containsKey('targetName'), isFalse);
+    expect(patrol.arguments, {'duration': 120});
     final pet = EboWidgetQuickCommand.resolve('quick_pet', ['尾牙是家裡的寵物貓']);
     expect(pet.tool, 'robot_patrol');
     expect(pet.arguments, {'duration': 120, 'objId': '2', 'targetName': '尾牙'});

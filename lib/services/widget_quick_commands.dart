@@ -24,8 +24,10 @@ class EboWidgetQuickCommand {
         return const EboWidgetQuickCommand(
             '回充', 'robot_go_home', {'startUp': true});
       case 'quick_patrol':
+        // The verified tool catalog uses duration alone for generic patrol.
+        // Target fields are reserved for an explicitly named pet search.
         return const EboWidgetQuickCommand('全屋巡邏 2 分鐘', 'robot_patrol', {
-          'duration': 120, 'objId': '', 'targetName': '',
+          'duration': 120,
         });
       case 'quick_photo':
         return const EboWidgetQuickCommand('拍照', 'robot_take_photo', {});
