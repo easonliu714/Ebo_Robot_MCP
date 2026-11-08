@@ -79,7 +79,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   String? _widgetStatus;
   bool _widgetQuickBusy = false;
   String? _widgetVoiceMode;
-  String _version = '0.2.4+9';
+  String _version = '0.2.5+10';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _streamConnecting = false;
@@ -127,7 +127,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     };
     _widgetChannel.setMethodCallHandler((call) async {
       if (call.method == 'widgetAction') {
-        _handleWidgetTarget(call.arguments?.toString());
+        await _dispatchWidgetTarget(call.arguments?.toString());
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -140,13 +140,25 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     try {
       final mode = await _widgetChannel.invokeMethod<String>(
           'getInitialWidgetTarget');
-      _handleWidgetTarget(mode);
+      await _dispatchWidgetTarget(mode);
     } on MissingPluginException {
       // Non-Android platform or Flutter unit tests: no widget channel.
     } catch (e) {
       _logs.log('WIDGET', '無法取得桌面小工具入口：' +
           e.runtimeType.toString(), level: 'WARN');
     }
+  }
+
+  /// A cold launch often receives the widget Intent before secure settings
+  /// (including Gemini key) are loaded. Dispatch only after load finishes.
+  Future<void> _dispatchWidgetTarget(String? mode) async {
+    if (!mounted || mode == null) return;
+    if (!_initialSettingsReady.isCompleted) {
+      _logs.log('WIDGET', '等待加密設定初始化後再啟動桌面小工具');
+      await _initialSettingsReady.future;
+    }
+    if (!mounted) return;
+    _handleWidgetTarget(mode);
   }
 
   void _handleWidgetTarget(String? mode) {

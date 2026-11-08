@@ -12,6 +12,7 @@ import '../services/ai_notebook.dart';
 import '../services/diagnostics.dart';
 import '../services/gemini_service.dart';
 import '../services/ebo_task_planner.dart';
+import '../services/ai_action_feedback.dart';
 import '../services/widget_quick_commands.dart';
 import '../services/mcp_service.dart';
 import 'ai_conversation_panel.dart';
@@ -43,6 +44,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   final _agent = GeminiAgent();
   final _recorder = AudioRecorder();
   final _input = TextEditingController();
+  late final Future<void> _notebookReady;
   bool _busy = false;
   bool _recording = false;
   bool _recordingGroundedQuestion = false;
@@ -81,22 +83,28 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _load();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetVoice());
+    _notebookReady = _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) =>
+        unawaited(_consumeWidgetVoice()));
   }
 
   @override
   void didUpdateWidget(covariant AiConversationScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.voiceRequestId != widget.voiceRequestId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _consumeWidgetVoice());
+      WidgetsBinding.instance.addPostFrameCallback((_) =>
+          unawaited(_consumeWidgetVoice()));
     }
   }
 
-  void _consumeWidgetVoice() {
-    if (!mounted || widget.voiceRequestId == 0 ||
-        _consumedVoiceRequest == widget.voiceRequestId) return;
-    _consumedVoiceRequest = widget.voiceRequestId;
+  Future<void> _consumeWidgetVoice() async {
+    final request = widget.voiceRequestId;
+    if (!mounted || request == 0 || _consumedVoiceRequest == request) return;
+    // Prevent a widget-triggered recording from racing encrypted chat loading.
+    await _notebookReady;
+    if (!mounted || widget.voiceRequestId != request ||
+        _consumedVoiceRequest == request) return;
+    _consumedVoiceRequest = request;
     final mode = widget.widgetVoiceMode;
     if (mode != 'voice_qa' && mode != 'voice_mcp') return;
     if (_busy || _recording) {
@@ -220,15 +228,22 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
             );
       await _notebook.addMessage('assistant', response);
       widget.logs.log('AI', 'AI 回答已加密保存至手機');
-      final notExecuted = response.startsWith('【未執行 MCP】') ||
-          (RegExp(r'未執行|本次沒有實體動作').hasMatch(response) &&
-              RegExp(r'巡邏|回充|移動|拍照|跟隨|尋找|導航|錄影').hasMatch(prompt));
+      final feedback = AiActionFeedback.fromResponse(
+        response: response,
+        prompt: prompt,
+        plannedPatrol: plan != null,
+      );
       if (mounted) setState(() {
-        _voiceStatus = notExecuted
-            ? '⚠️ AI 有回覆，但未確認任何新的 MCP 動作。'
-            : 'AI 已完成處理；請查看下方對話或機器人確認視窗。';
+        _voiceStatus = switch (feedback) {
+          AiActionFeedback.notExecuted =>
+            '⚠️ 未執行 MCP；請閱讀原因及錯誤視窗。',
+          AiActionFeedback.firstStageAccepted =>
+            '✅ 巡邏第一階段已送出，後續拍照或跟隨仍須確認條件。',
+          AiActionFeedback.completedOrAnswered =>
+            'AI 已完成處理；請查看下方對話及 MCP 回應。',
+        };
       });
-      if (notExecuted) {
+      if (feedback == AiActionFeedback.notExecuted) {
         await _showFailureDialog('沒有執行機器人動作',
             'Gemini 沒有成功送出 MCP 動作。\n\n$response\n\n'
             '請確認 MCP 已連線及語音模式是否正確。');
@@ -285,6 +300,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
               ? '🔴 正在錄音：語音查詢 → Gemini 即時查詢 → EBO 語音回答。再點擊語音按鈕送出。'
               : '🔴 正在錄音：語音指令 → 文字辨識 → MCP 控制。再點擊語音按鈕送出。';
         });
+        _notify(groundedQuestion
+            ? '🎙️ EBO 語音查詢正在錄音，再點一次送出'
+            : '🎤 EBO 語音指令正在錄音，再點一次送出');
       } else {
         final path = await _recorder.stop();
         if (mounted) setState(() {

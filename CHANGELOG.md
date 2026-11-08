@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.5+10 — 2026-11-08
+- Polish production launcher PNG by clipping stray cyan pixels outside the round-square app tile. Preserve the original teal/blue gradient; ensure RGBA corners are truly transparent and verified in CI. Same asset generates installer, legacy and adaptive launcher icons.
+- Retain real native widget layouts and Android picker preview art (robot-only Q&A, controller-only MCP, combined dual widget, and four quick actions); CI asserts manifest/preview resources were installed, not merely generated as mockups.
+- Fix Android cold-launch widget race: wait for encrypted Gemini/MCP settings to finish loading before attempting to open microphone mode or resolve home-screen quick commands.
+- Fix AI false alarms: a successful first-stage patrol with deferred photography/follow now shows "partial action sent" instead of a misleading "no MCP" error dialog.
+- Add instant microphone-start snackbar in addition to persistent status banner, including action mode and the instruction to tap again to send.
+- Add regression tests for deferred plans, failed execution and pure informational answers. Preserve MCP approval on all physical actions and existing JKS signing.
+
+
 ## 0.2.4+9 — 2026-11-08
 
 - Replace launcher and installed APK adaptive/legacy icons with the approved glossy 3D robot plus controller in a cyan-to-blue rounded-square gradient. Outer corners remain transparent.

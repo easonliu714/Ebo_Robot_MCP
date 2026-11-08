@@ -48,6 +48,9 @@ jobs:
           test -s android/app/src/main/kotlin/com/easonliu714/ebo_robot_mcp/EboVoiceWidgets.kt
           test -s android/app/src/main/res/xml/ebo_voice_dual_info.xml
           test -s android/app/src/main/res/xml/ebo_voice_quick_info.xml
+          grep -q 'EboQuickWidgetProvider' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:previewImage="@drawable/ebo_preview_quick"' android/app/src/main/res/xml/ebo_voice_quick_info.xml
+          grep -q 'android:previewImage="@drawable/ebo_preview_qa"' android/app/src/main/res/xml/ebo_voice_qa_info.xml
       - name: Dependencies
         run: flutter pub get
       - name: Install approved 3D launcher and native widget imagery
@@ -55,6 +58,14 @@ jobs:
           python3 -m pip install --quiet --target .ci-python Pillow
           PYTHONPATH="$PWD/.ci-python" python3 scripts/render_launcher_icon.py
           test -s assets/icon/ebo_launcher_v3.png
+          PYTHONPATH="$PWD/.ci-python" python3 - <<'PY'
+          from PIL import Image
+          im=Image.open('assets/icon/ebo_launcher_v3.png').convert('RGBA')
+          assert im.size==(1024,1024)
+          for xy in ((0,0),(0,1023),(1023,0),(1023,1023)):
+              assert im.getpixel(xy)[3] == 0, f'corner not transparent: {xy}'
+          print('Launcher alpha and dimensions validated')
+          PY
           test -s android/app/src/main/res/drawable-nodpi/ebo_preview_qa.png
           test -s android/app/src/main/res/drawable-nodpi/ebo_preview_quick.png
       - name: Install EBO robot launcher icon (legacy + adaptive)
@@ -73,18 +84,18 @@ jobs:
         run: flutter test
       - name: Build test APK
         run: |
-          flutter build apk --debug --build-name=0.2.4 --build-number="$GITHUB_RUN_NUMBER"
+          flutter build apk --debug --build-name=0.2.5 --build-number="$GITHUB_RUN_NUMBER"
           mkdir -p artifacts
-          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.4-build$GITHUB_RUN_NUMBER-debug.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "artifacts/EBO-v0.2.5-build$GITHUB_RUN_NUMBER-debug.apk"
       - name: Build signed release APK if configured
         if: steps.signing.outputs.release == 'true' && github.event_name != 'pull_request'
         run: |
-          flutter build apk --release --build-name=0.2.4 --build-number="$GITHUB_RUN_NUMBER"
-          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.4-build$GITHUB_RUN_NUMBER-release.apk"
+          flutter build apk --release --build-name=0.2.5 --build-number="$GITHUB_RUN_NUMBER"
+          cp build/app/outputs/flutter-apk/app-release.apk "artifacts/EBO-v0.2.5-build$GITHUB_RUN_NUMBER-release.apk"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: EBO-Android-v0.2.4-build${{ github.run_number }}
+          name: EBO-Android-v0.2.5-build${{ github.run_number }}
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error

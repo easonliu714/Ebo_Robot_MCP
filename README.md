@@ -222,3 +222,23 @@ In the AI page, commands that cannot be executed surface a persistent
 information dialog. When a weather/news question is accidentally submitted to
 the voice MCP mode, the app offers to reroute to grounded Q&A. This does not
 execute any MCP motion command without consent.
+
+
+## v0.2.5 Widget verification and startup behavior
+
+The real Android widgets (not screenshots) are created in
+`scripts/install_android_widgets.dart` and reference the approved compressed
+art in `assets/branding`. Four widget providers are installed: separate
+**EBO 語音查詢** (microphone + robot), **EBO 語音控制** (microphone +
+controller), combined voice buttons and a **回充 / 巡邏 / 找寵 / 拍照**
+quick-command panel. Each has a distinct widget-picker preview; titles
+auto-scale with Android widget size. Home-screen voice opens the foreground
+app, waits for secure settings and notebook loading, then prompts clearly
+when recording begins. Quick robot actions validate live MCP tool schemas
+and require user confirmation before any tools/call. Errors appear as
+dialogs and persistent banners. Background/automatic microphone capture is
+not used.
+
+The launcher is built from the approved 3D robot/controller artwork, retains
+the blue gradient within the rounded tile and clips all pixels outside the
+tile to true alpha transparency (including installer/legacy/adaptive icons).
