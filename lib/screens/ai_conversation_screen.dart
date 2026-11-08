@@ -12,6 +12,7 @@ import '../services/ai_notebook.dart';
 import '../services/diagnostics.dart';
 import '../services/gemini_service.dart';
 import '../services/ebo_task_planner.dart';
+import '../services/widget_quick_commands.dart';
 import '../services/mcp_service.dart';
 import 'ai_conversation_panel.dart';
 
@@ -45,6 +46,36 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   bool _busy = false;
   bool _recording = false;
   bool _recordingGroundedQuestion = false;
+  int _consumedVoiceRequest = 0;
+  String? _voiceStatus;
+
+  Future<void> _showFailureDialog(String title, String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(Redactor.clean(message)),
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(ctx),
+              child: const Text('了解')),
+        ],
+      ),
+    );
+  }
+
+  Widget _voiceStatusBanner() => MaterialBanner(
+    leading: Icon(_recording ? Icons.mic : Icons.info_outline,
+        color: _recording ? Colors.redAccent : Colors.cyanAccent),
+    content: Text(_voiceStatus ?? '', style: const TextStyle(fontSize: 12)),
+    actions: [
+      TextButton(onPressed: () => setState(() => _voiceStatus = null),
+          child: const Text('關閉提示')),
+    ],
+  );
+
 
   @override
   void initState() {
@@ -63,7 +94,10 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   }
 
   void _consumeWidgetVoice() {
-    if (!mounted || widget.voiceRequestId == 0 || _busy || _recording) return;
+    if (!mounted || widget.voiceRequestId == 0 || _busy || _recording ||
+        _consumedVoiceRequest == widget.voiceRequestId) return;
+    _consumedVoiceRequest = widget.voiceRequestId;
+    setState(() => _voiceStatus = '已收到桌面語音入口，正在檢查麥克風權限並啟動錄音…');
     final mode = widget.widgetVoiceMode;
     if (mode != 'voice_qa' && mode != 'voice_mcp') return;
     widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode.toString());
@@ -80,6 +114,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
         _recordingGroundedQuestion = false;
       });
       widget.logs.log('WIDGET', 'App 進入背景：停止錄音，不送出指令');
+      if (mounted) setState(() => _voiceStatus = '錄音已因離開 App 而停止，沒有送出任何指令。');
     }).catchError((Object e) {
       widget.logs.log('WIDGET', '背景停止錄音失敗：' +
           e.runtimeType.toString(), level: 'ERROR');
@@ -105,58 +140,109 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
 
   Future<void> _send({Uint8List? audio}) async {
     if (_busy) return;
-    final prompt = _input.text.trim();
-    if (audio == null && prompt.isEmpty) return;
-    final previousContext = _notebook.contextForModel;
-    setState(() => _busy = true);
+    final typed = _input.text.trim();
+    if (audio == null && typed.isEmpty) return;
+    setState(() {
+      _busy = true;
+      if (audio != null) _voiceStatus = '正在辨識語音並確認 MCP 指令類型…';
+    });
+    String? forwardToGrounded;
     try {
-      await _notebook.addMessage('user',
-          audio == null ? prompt : '🎙️ 由手機錄音輸入語音指令');
+      // Voice MCP goes through an explicit transcription stage. This lets the
+      // user see what was heard and prevents factual Q&A from silently
+      // activating an unrelated robot tool.
+      final prompt = audio == null ? typed : await _agent.transcribeAudio(
+        apiKey: widget.apiKey,
+        bytes: audio,
+      );
+      if (audio != null) {
+        widget.logs.log('VOICE_MCP', '語音已辨識，開始判斷資訊查詢或機器人指令');
+        if (mounted) setState(() => _voiceStatus = '語音辨識完成：$prompt');
+      }
+      if (audio != null && EboWidgetQuickCommand.isInformationQuestion(prompt)) {
+        final reroute = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('目前使用的是 MCP 語音控制'),
+            content: SingleChildScrollView(child: Text(
+              '辨識到：$prompt\n\n這是資訊查詢，不是機器人移動或拍照命令。'
+              '為避免誤執行，本次沒有呼叫 MCP。\n\n'
+              '是否改用 Gemini 即時查詢，並讓 EBO 語音播報？')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('取消，先不執行')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('改用語音查詢')),
+            ],
+          ),
+        );
+        if (reroute == true) {
+          forwardToGrounded = prompt;
+          if (mounted) setState(() => _voiceStatus = '已切換至即時查詢，準備取得資料與語音播報。');
+        } else {
+          await _notebook.addMessage('user', prompt);
+          await _notebook.addMessage('assistant',
+              '【未執行 MCP】這是資訊查詢。請使用「語音查詢＋EBO 語音回覆」。');
+          if (mounted) setState(() => _voiceStatus = '未執行 MCP：已取消資訊查詢轉換。');
+        }
+        widget.logs.log('VOICE_MCP', '資訊查詢未進入機器人動作工具');
+        return;
+      }
+      final previousContext = _notebook.contextForModel;
+      await _notebook.addMessage('user', prompt);
       if (mounted) setState(() {});
-      // User-approved named-pet memory can resolve an explicit cat-patrol
-      // command deterministically. Only the first verifiable stage executes.
-      final plan = audio == null
-          ? EboTaskPlan.fromPrompt(prompt, _notebook.notes) : null;
+      final plan = EboTaskPlan.fromPrompt(prompt, _notebook.notes);
       final response = plan != null
           ? await plan.startPatrol(
               mcp: widget.mcp,
               approve: widget.approve,
               onStep: (v) => widget.logs.log('AI_PLAN', v),
             )
-          : audio == null
-            ? await _agent.runText(
-                apiKey: widget.apiKey,
-                prompt: prompt,
-                contextNotes: previousContext,
-                mcp: widget.mcp,
-                approve: widget.approve,
-                onStep: (v) => widget.logs.log('AI', v),
-              )
-            : await _agent.runAudio(
-                apiKey: widget.apiKey,
-                bytes: audio,
-                contextNotes: previousContext,
-                mcp: widget.mcp,
-                approve: widget.approve,
-                onStep: (v) => widget.logs.log('AI', v),
-              );
+          : await _agent.runText(
+              apiKey: widget.apiKey,
+              prompt: prompt,
+              contextNotes: previousContext,
+              mcp: widget.mcp,
+              approve: widget.approve,
+              onStep: (v) => widget.logs.log('AI', v),
+            );
       await _notebook.addMessage('assistant', response);
       widget.logs.log('AI', 'AI 回答已加密保存至手機');
-      if (mounted) setState(() {});
+      final notExecuted = response.startsWith('【未執行 MCP】') ||
+          (RegExp(r'未執行|本次沒有實體動作').hasMatch(response) &&
+              RegExp(r'巡邏|回充|移動|拍照|跟隨|尋找|導航|錄影').hasMatch(prompt));
+      if (mounted) setState(() {
+        _voiceStatus = notExecuted
+            ? '⚠️ AI 有回覆，但未確認任何新的 MCP 動作。'
+            : 'AI 已完成處理；請查看下方對話或機器人確認視窗。';
+      });
+      if (notExecuted) {
+        await _showFailureDialog('沒有執行機器人動作',
+            'Gemini 沒有成功送出 MCP 動作。\n\n$response\n\n'
+            '請確認 MCP 已連線及語音模式是否正確。');
+      }
     } catch (e) {
       final summary = e is GeminiApiException
-          ? 'Gemini HTTP ' + e.statusCode.toString() +
-              ' API_STATUS=' + e.apiStatus
-          : e is McpException
-              ? 'MCP request failure: ' + Redactor.clean(e.message)
-              : e.runtimeType.toString();
-      widget.logs.log('AI', '一般對話失敗：' + summary, level: 'ERROR');
-      await _notebook.addMessage('assistant',
-          '這次沒有確認任何新的 MCP 動作。指令失敗：' + summary);
-      if (mounted) setState(() {});
-      _notify('AI/MCP 指令未完成：' + summary);
+          ? 'Gemini HTTP ${e.statusCode} / ${e.apiStatus}'
+          : e is McpException ? Redactor.clean(e.message)
+          : e is FormatException ? e.message : e.runtimeType.toString();
+      widget.logs.log('AI', '指令失敗：$summary', level: 'ERROR');
+      try {
+        await _notebook.addMessage('assistant',
+            '【未執行 MCP】指令失敗：$summary');
+      } catch (_) { /* Log will still include sanitized failure. */ }
+      if (mounted) setState(() => _voiceStatus = '⚠️ 沒有執行 MCP：$summary');
+      await _showFailureDialog('AI／MCP 指令無法執行',
+          '本次沒有確認任何新的機器人動作。\n原因：$summary\n\n'
+          '請檢查 Gemini API Key、連線與 Log。');
     } finally {
       if (mounted) setState(() => _busy = false);
+      if (forwardToGrounded != null && mounted) {
+        final question = forwardToGrounded!;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_groundedSpeak(promptOverride: question));
+        });
+      }
     }
   }
 
@@ -169,7 +255,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     try {
       if (!_recording) {
         if (!await _recorder.hasPermission()) {
-          _notify('需要授予麥克風權限');
+          setState(() => _voiceStatus = '無法啟動錄音：尚未授予麥克風權限。');
+          await _showFailureDialog('麥克風權限不足',
+              '請在 Android 設定中允許 EBO 使用麥克風，再重新點擊桌面小工具。');
           return;
         }
         final dir = await getTemporaryDirectory();
@@ -181,10 +269,18 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
         if (mounted) setState(() {
           _recording = true;
           _recordingGroundedQuestion = groundedQuestion;
+          _voiceStatus = groundedQuestion
+              ? '🔴 正在錄音：語音查詢 → Gemini 即時查詢 → EBO 語音回答。再點擊語音按鈕送出。'
+              : '🔴 正在錄音：語音指令 → 文字辨識 → MCP 控制。再點擊語音按鈕送出。';
         });
       } else {
         final path = await _recorder.stop();
-        if (mounted) setState(() => _recording = false);
+        if (mounted) setState(() {
+          _recording = false;
+          _voiceStatus = groundedQuestion
+              ? '錄音完成，正在轉寫及取得即時資訊…'
+              : '錄音完成，正在辨識指令及確認 MCP 動作…';
+        });
         if (path == null) throw const FormatException('找不到錄音資料');
         final file = File(path);
         final bytes = await file.readAsBytes();
@@ -201,7 +297,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
         _recordingGroundedQuestion = false;
       });
       widget.logs.log('VOICE', '錄音失敗：${e.runtimeType}', level: 'ERROR');
-      _notify('語音指令錄製／傳送失敗');
+      if (mounted) setState(() => _voiceStatus = '語音錄製失敗，沒有執行 MCP。');
+      await _showFailureDialog('語音錄製或傳送失敗',
+          '無法完成錄音流程：${e.runtimeType}。請檢查麥克風權限、儲存空間與網路。');
     }
   }
 
@@ -220,7 +318,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     } catch (e) {
       widget.logs.log('VOICE_QA',
           '轉寫失敗：' + e.runtimeType.toString(), level: 'ERROR');
-      _notify('無法辨識語音問題，請重新錄製');
+      await _showFailureDialog('無法辨識語音問題',
+          '這次沒有執行任何 MCP 動作。請重新錄製語音並確認背景噪音。');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -252,7 +351,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
       await _speak(answer.text);
     } catch (e) {
       widget.logs.log('AI', '即時資訊取得失敗：${e.runtimeType}', level: 'ERROR');
-      _notify('目前無法確認最新資料或來源，未安排語音播報');
+      await _showFailureDialog('即時查詢失敗',
+          '目前無法取得可核實的資料與來源，因此沒有讓 EBO 播報。\n請確認 Gemini Key、網路或稍後重試。');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -410,7 +510,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   }
 
   @override
-  Widget build(BuildContext context) => AiConversationPanel(
+  Widget build(BuildContext context) => Column(children: [
+    if (_voiceStatus != null) _voiceStatusBanner(),
+    Expanded(child: AiConversationPanel(
     notebook: _notebook,
     input: _input,
     busy: _busy,
@@ -429,7 +531,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
       if (mounted) setState(() {});
     },
     onSpeak: _speak,
-  );
+  )),
+  ]);
 
   @override
   void dispose() {
