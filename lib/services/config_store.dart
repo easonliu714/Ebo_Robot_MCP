@@ -6,6 +6,8 @@ class PrivateSettings {
   String rtspUrl;
   String actionMap;
   int leftTurnDegrees;
+  int turnRadiusMode;
+  int diagonalTurnDegrees;
 
   PrivateSettings({
     this.mcpJson = '',
@@ -13,6 +15,8 @@ class PrivateSettings {
     this.rtspUrl = '',
     this.actionMap = '',
     this.leftTurnDegrees = 30,
+    this.turnRadiusMode = 1,
+    this.diagonalTurnDegrees = 7,
   });
 }
 
@@ -25,6 +29,8 @@ class ConfigStore {
     rtspUrl: await _storage.read(key: 'rtsp_url') ?? '',
     actionMap: await _storage.read(key: 'action_map') ?? '',
     leftTurnDegrees: int.tryParse(await _storage.read(key: 'left_turn_degrees') ?? '') ?? 30,
+    turnRadiusMode: int.tryParse(await _storage.read(key: 'turn_radius_mode') ?? '') ?? 1,
+    diagonalTurnDegrees: int.tryParse(await _storage.read(key: 'diagonal_turn_degrees') ?? '') ?? 7,
   );
 
   Future<void> save(PrivateSettings settings) async {
@@ -33,5 +39,7 @@ class ConfigStore {
     await _storage.write(key: 'rtsp_url', value: settings.rtspUrl);
     await _storage.write(key: 'action_map', value: settings.actionMap);
     await _storage.write(key: 'left_turn_degrees', value: settings.leftTurnDegrees.toString());
+    await _storage.write(key: 'turn_radius_mode', value: settings.turnRadiusMode.toString());
+    await _storage.write(key: 'diagonal_turn_degrees', value: settings.diagonalTurnDegrees.toString());
   }
 }

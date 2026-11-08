@@ -8,5 +8,10 @@ void main() {
     expect(MoveStepPolicy.distance('right', leftAngle: 45), 15);
     expect(MoveStepPolicy.distance('forward', leftAngle: 45), 0.2);
     expect(MoveStepPolicy.normalizeLeftAngle(999), 30);
+    expect(MoveStepPolicy.normalizeTurnRadiusMode(3), 3);
+    expect(MoveStepPolicy.normalizeTurnRadiusMode(99), 1);
+    expect(MoveStepPolicy.normalizeDiagonalAngle(10), 10);
+    expect(MoveStepPolicy.normalizeDiagonalAngle(360), 7);
+    expect(MoveStepPolicy.turnSettling.inMilliseconds, 400);
   });
 }

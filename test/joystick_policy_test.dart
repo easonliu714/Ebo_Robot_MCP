@@ -20,6 +20,11 @@ void main() {
     expect(upLeft.map((e) => e.moveId).toList(), [3, 1]);
     expect(upLeft.map((e) => e.targetDistance).toList(), [7, 0.1]);
     final downRight = JoystickPolicy.diagonalSteps('backward_right');
+    final calibrated = JoystickPolicy.diagonalSteps(
+        'forward_left', turnDegrees: 15);
+    expect(calibrated.map((e) => e.targetDistance).toList(), [15, 0.1]);
+    expect(() => JoystickPolicy.diagonalSteps(
+        'forward_left', turnDegrees: 360), throwsArgumentError);
     expect(downRight.map((e) => e.moveId).toList(), [4, 2]);
     expect(JoystickPolicy.isDiagonal('left'), isFalse);
     expect(JoystickPolicy.isDiagonal('backward_right'), isTrue);

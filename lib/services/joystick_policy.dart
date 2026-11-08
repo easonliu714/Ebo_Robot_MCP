@@ -30,12 +30,19 @@ class JoystickPolicy {
     return 'backward_right';
   }
 
-  /// About 7° and 0.1m per diagonal pair. No simultaneous motor commands.
-  static List<JoystickMove> diagonalSteps(String direction) => switch (direction) {
-    'forward_left' => const [JoystickMove(3, 7), JoystickMove(1, 0.1)],
-    'forward_right' => const [JoystickMove(4, 7), JoystickMove(1, 0.1)],
-    'backward_left' => const [JoystickMove(3, 7), JoystickMove(2, 0.1)],
-    'backward_right' => const [JoystickMove(4, 7), JoystickMove(2, 0.1)],
-    _ => throw ArgumentError.value(direction, 'direction'),
-  };
+  /// Sequential turn then translation; not simultaneous velocity control.
+  /// Operator-selectable microturn angle defaults to 7 degrees.
+  static List<JoystickMove> diagonalSteps(
+      String direction, {int turnDegrees = 7}) {
+    if (!const [7, 10, 15].contains(turnDegrees)) {
+      throw ArgumentError.value(turnDegrees, 'turnDegrees');
+    }
+    return switch (direction) {
+      'forward_left' => [JoystickMove(3, turnDegrees), const JoystickMove(1, 0.1)],
+      'forward_right' => [JoystickMove(4, turnDegrees), const JoystickMove(1, 0.1)],
+      'backward_left' => [JoystickMove(3, turnDegrees), const JoystickMove(2, 0.1)],
+      'backward_right' => [JoystickMove(4, turnDegrees), const JoystickMove(2, 0.1)],
+      _ => throw ArgumentError.value(direction, 'direction'),
+    };
+  }
 }
