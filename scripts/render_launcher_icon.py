@@ -1,56 +1,24 @@
 from pathlib import Path
-from PIL import Image, ImageFilter, ImageChops
+from PIL import Image
 
-# Reproducible edit of the existing EBO launcher icon. No generated-art
-# binary, secret or external network asset is needed in the repository.
-source = Path('assets/icon/ebo_launcher.png')
-output = Path('assets/icon/ebo_launcher_v2.png')
-if not source.exists():
-    raise SystemExit('Original EBO launcher icon missing')
-icon = Image.open(source).convert('RGB')
-size = icon.width
-if size != icon.height:
-    raise SystemExit('Launcher icon must be square')
+# Approved 3D icon / widget art is committed as WebP to keep Git history small.
+# Expand to PNG for flutter_launcher_icons and Android widget drawables in CI.
+root = Path('assets/branding')
+launcher = Image.open(root / 'ebo_launcher_v3.webp').convert('RGBA')
+out = Path('assets/icon/ebo_launcher_v3.png')
+out.parent.mkdir(parents=True, exist_ok=True)
+launcher.resize((1024, 1024), Image.Resampling.LANCZOS).save(out, optimize=True)
+if launcher.getpixel((0, 0))[3] != 0:
+    raise SystemExit('Launcher outer corners must be transparent')
 
-# Reconstruct the dark-blue / teal background, deleting all Wi-Fi arcs.
-base = Image.new('RGB', (size, size))
-pixels = base.load()
-for y in range(size):
-    v = y / (size - 1)
-    for x in range(size):
-        u = x / (size - 1)
-        tl, tr, bl, br = (1, 13, 43), (0, 75, 105), (1, 31, 83), (0, 196, 181)
-        pixels[x, y] = tuple(round(
-            (1-v)*((1-u)*tl[k] + u*tr[k]) +
-            v*((1-u)*bl[k] + u*br[k])) for k in range(3))
-
-alpha = Image.new('L', (size, size))
-mask = alpha.load()
-original = icon.load()
-for y in range(size):
-    for x in range(size):
-        r,g,b = original[x,y]
-        if y < size * (52/192):
-            continue
-        bright = max(0, min(255, round((min(g,b)-110)*2))) \
-            if r < 120 and g-r > 110 and b-r > 100 else 0
-        if ((x-size*.5)**2 + (y-size*.49)**2) < (size*.092)**2:
-            bright = 255
-        mask[x,y] = bright
-glow = alpha.filter(ImageFilter.GaussianBlur(radius=max(1,size*.013)))
-glow = glow.point(lambda value: round(value*.24))
-alpha = ImageChops.lighter(alpha, glow)
-subject = icon.convert('RGBA')
-subject.putalpha(alpha)
-
-# Scale exactly 1.5x and re-center; app icon adaptive mask clips corners.
-scale = 1.5
-magnified = subject.resize((round(size*scale), round(size*scale)),
-                           Image.Resampling.LANCZOS)
-x0 = round(size*.5*scale-size*.5)
-y0 = round(size*.59*scale-size*.5)
-magnified = magnified.crop((x0, y0, x0+size, y0+size))
-base.paste(magnified, (0,0), magnified)
-output.parent.mkdir(parents=True,exist_ok=True)
-base.resize((1024,1024),Image.Resampling.LANCZOS).save(output,optimize=True)
-print('Created 1024x1024 EBO launcher: radio waves removed, content 1.5x')
+names = ('widget_qa', 'widget_mcp', 'widget_dock', 'widget_patrol',
+         'widget_pet', 'widget_photo', 'preview_qa', 'preview_mcp',
+         'preview_dual', 'preview_quick')
+res = Path('android/app/src/main/res/drawable-nodpi')
+res.mkdir(parents=True, exist_ok=True)
+for name in names:
+    source = root / (name + '.webp')
+    im = Image.open(source).convert('RGBA')
+    im.save(res / ('ebo_' + name + '.png'), optimize=True)
+print('Installed approved transparent 3D launcher and', len(names),
+      'widget artwork/preview resources.')
