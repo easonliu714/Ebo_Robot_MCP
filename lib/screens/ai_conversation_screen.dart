@@ -112,7 +112,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
       return;
     }
     setState(() => _voiceStatus = '已收到桌面語音入口，正在檢查麥克風權限並啟動錄音…');
-    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode);
+    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode.toString());
     unawaited(_toggleVoice(groundedQuestion: mode == 'voice_qa'));
   }
 
