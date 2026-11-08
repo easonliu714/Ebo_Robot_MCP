@@ -159,13 +159,13 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
         widget.logs.log('VOICE_MCP', '語音已辨識，開始判斷資訊查詢或機器人指令');
         if (mounted) setState(() => _voiceStatus = '語音辨識完成：$prompt');
       }
-      if (audio != null && EboWidgetQuickCommand.isInformationQuestion(prompt)) {
+      if (EboWidgetQuickCommand.isInformationQuestion(prompt)) {
         final reroute = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('目前使用的是 MCP 語音控制'),
+            title: const Text('目前使用的是 AI／MCP 指令入口'),
             content: SingleChildScrollView(child: Text(
-              '辨識到：$prompt\n\n這是資訊查詢，不是機器人移動或拍照命令。'
+              '輸入／辨識內容：$prompt\n\n這是資訊查詢，不是機器人移動或拍照命令。'
               '為避免誤執行，本次沒有呼叫 MCP。\n\n'
               '是否改用 Gemini 即時查詢，並讓 EBO 語音播報？')),
             actions: [
@@ -332,7 +332,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     if (_busy) return;
     final prompt = promptOverride ?? _input.text.trim();
     if (prompt.isEmpty) {
-      _notify('請輸入問題及城市，例如：桃園市今天下午天氣');
+      await _showFailureDialog('尚未輸入查詢內容',
+          '請輸入問題及城市，例如：桃園市今天下午天氣。');
       return;
     }
     final notes = _notebook.contextForModel;
@@ -362,14 +363,16 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     final tool = widget.mcp.tools
         .where((t) => t.name == 'robot_speak').firstOrNull;
     if (!widget.mcp.connected || tool == null) {
-      _notify('MCP 未連線或未提供 robot_speak 工具');
+      await _showFailureDialog('EBO 語音播報無法執行',
+          'MCP 尚未連線，或原廠未提供 robot_speak。\nAI 查詢內容仍會保留於對話紀錄。');
       return;
     }
     var spoken = text.split('\n來源：').first
         .replaceAll(RegExp(r'https?://\S+'), '')
         .replaceAll(RegExp(r'[*#_]+'), '').trim();
     if (spoken.isEmpty) {
-      _notify('沒有可播報的文字');
+      await _showFailureDialog('沒有可播報內容',
+          'Gemini 沒有提供可用於 EBO 播報的文字。');
       return;
     }
     if (spoken.length > 220) spoken = spoken.substring(0, 220);
@@ -384,7 +387,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
         final chinese = ['zh-TW', 'zh', 'zh_CN', 'zh-CN']
             .where(enums.contains).firstOrNull;
         if (chinese == null) {
-          _notify('機器人的語言選項沒有可辨識的中文語系');
+          await _showFailureDialog('EBO 語音無法執行',
+              '原廠 robot_speak 未提供可辨識的繁體／中文語言選項。');
           return;
         }
         args['lang'] = chinese;
@@ -394,13 +398,17 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     }
     try {
       ActionMap.validateArguments(tool, args);
-      if (!await widget.approve(tool.name, args)) return;
+      if (!await widget.approve(tool.name, args)) {
+        _notify('您已取消 EBO 語音播報，沒有送出 MCP 指令');
+        return;
+      }
       await widget.mcp.call(tool.name, args);
       widget.logs.log('VOICE', 'robot_speak 已送出');
       _notify('已傳送至 EBO 語音播放工具');
     } catch (e) {
       widget.logs.log('VOICE', 'EBO 播報失敗：${e.runtimeType}', level: 'ERROR');
-      _notify('EBO 播報未成功，請查看 Log');
+      await _showFailureDialog('EBO 語音播報無法執行',
+          '已取得 AI 回答，但 robot_speak 沒有成功完成 MCP 呼叫：${e.runtimeType}。\n請檢查 Log。');
     }
   }
 

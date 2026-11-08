@@ -463,14 +463,19 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       }
       return;
     }
-    if (_commandBusy && action != 'stop') return;
+    if (_commandBusy && action != 'stop') {
+      await _widgetInformation('動作未執行', '上一個 MCP 動作仍在處理中，請稍後再操作。');
+      return;
+    }
     final binding = _actionMap[action];
     if (binding == null || binding.tool.isEmpty) {
-      _notify('「' + (robotActions[action] ?? action) + '」尚未綁定 MCP 工具');
+      await _widgetInformation('MCP 動作尚未綁定',
+          '「' + (robotActions[action] ?? action) + '」未設定工具，沒有送出指令。');
       return;
     }
     if (!_mcp.connected) {
-      _notify('請先連線 MCP');
+      await _widgetInformation('MCP 尚未連線',
+          '目前無法送出「' + (robotActions[action] ?? action) + '」。請先連線並確認 AccessKey 有效。');
       return;
     }
     if (action != 'stop') setState(() => _commandBusy = true);
@@ -487,15 +492,18 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       final elapsed = Stopwatch()..start();
       await _mcp.call(binding.tool, args);
       elapsed.stop();
-      _logs.log('ACTION', '成功：' + (robotActions[action] ?? action) +
+      _logs.log('ACTION', 'MCP 已回應：' + (robotActions[action] ?? action) +
           ' → ' + binding.tool +
           (action == 'left' ? ' 左轉角度=' + _settings.leftTurnDegrees.toString() : '') +
           ' 耗時=' + elapsed.elapsedMilliseconds.toString() + 'ms');
-      if (mounted) _notify((robotActions[action] ?? action) + '執行成功');
+      if (mounted) _notify((robotActions[action] ?? action) + '：MCP 已回應，請確認實際動作');
     } catch (e) {
       _logs.log('ACTION', (robotActions[action] ?? action) +
           '失敗：' + e.toString(), level: 'ERROR');
-      _notify('命令未成功，請檢查診斷紀錄');
+      await _widgetInformation('MCP 控制指令失敗',
+          '動作：「' + (robotActions[action] ?? action) +
+          '」\n原因：' + Redactor.clean(e.toString()) +
+          '\n\n本次沒有確認新的機器人動作，請檢查診斷 Log。');
     } finally {
       if (mounted && action != 'stop') setState(() => _commandBusy = false);
     }
