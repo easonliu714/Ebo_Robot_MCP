@@ -153,9 +153,9 @@ class EboQuickWidgetProvider : AppWidgetProvider() {
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/$clickId" android:layout_width="match_parent"
   android:layout_height="match_parent" android:padding="3dp"
-  android:background="@drawable/ebo_widget_outer">
+  android:contentDescription="EBO $label" android:background="@drawable/ebo_widget_outer">
   <ImageView android:layout_width="match_parent" android:layout_height="match_parent"
-    android:src="@drawable/$art" android:scaleType="fitXY"/>
+    android:src="@drawable/$art" android:scaleType="fitCenter"/>
   <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:gravity="center_vertical"
     android:paddingStart="10dp" android:paddingEnd="42dp">
@@ -164,12 +164,12 @@ class EboQuickWidgetProvider : AppWidgetProvider() {
       android:textColor="#FFFFFF" android:textSize="13sp"/>
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
       android:singleLine="true" android:text="$label" android:textColor="#FFFFFF"
-      android:textStyle="bold" android:textSize="13sp"
-      android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp"
-      android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
+      android:textStyle="bold" android:textSize="12sp"
+      android:autoSizeTextType="uniform" android:autoSizeMinTextSize="8sp"
+      android:autoSizeMaxTextSize="12sp" android:autoSizeStepGranularity="1sp"/>
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
       android:singleLine="true" android:text="$sub" android:textColor="#CAECF5"
-      android:textSize="10sp" android:autoSizeTextType="uniform"
+      android:textSize="9sp" android:autoSizeTextType="uniform"
       android:autoSizeMinTextSize="8sp" android:autoSizeMaxTextSize="10sp"
       android:autoSizeStepGranularity="1sp"/>
   </LinearLayout>
@@ -189,7 +189,7 @@ class EboQuickWidgetProvider : AppWidgetProvider() {
   <FrameLayout android:id="@+id/ebo_dual_qa" android:layout_width="0dp"
     android:layout_weight="1" android:layout_height="match_parent" android:padding="1dp">
     <ImageView android:layout_width="match_parent" android:layout_height="match_parent"
-      android:src="@drawable/ebo_widget_qa" android:scaleType="fitXY"/>
+      android:src="@drawable/ebo_widget_qa" android:scaleType="fitCenter"/>
     <TextView android:layout_width="match_parent" android:layout_height="match_parent"
       android:gravity="center_vertical|left" android:paddingStart="8dp"
       android:paddingEnd="32dp" android:text="🎙 語音查詢"
@@ -200,7 +200,7 @@ class EboQuickWidgetProvider : AppWidgetProvider() {
   <FrameLayout android:id="@+id/ebo_dual_mcp" android:layout_width="0dp"
     android:layout_weight="1" android:layout_height="match_parent" android:padding="1dp">
     <ImageView android:layout_width="match_parent" android:layout_height="match_parent"
-      android:src="@drawable/ebo_widget_mcp" android:scaleType="fitXY"/>
+      android:src="@drawable/ebo_widget_mcp" android:scaleType="fitCenter"/>
     <TextView android:layout_width="match_parent" android:layout_height="match_parent"
       android:gravity="center_vertical|left" android:paddingStart="8dp"
       android:paddingEnd="32dp" android:text="🎙 語音控制"
@@ -216,7 +216,7 @@ class EboQuickWidgetProvider : AppWidgetProvider() {
     android:layout_weight="1" android:layout_height="match_parent"
     android:layout_margin="2dp" android:background="@drawable/ebo_widget_quick_bg">
     <ImageView android:layout_width="match_parent" android:layout_height="match_parent"
-      android:src="@drawable/$art" android:scaleType="fitXY"/>
+      android:src="@drawable/$art" android:scaleType="fitCenter"/>
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
       android:layout_gravity="bottom" android:gravity="center" android:paddingBottom="3dp"
       android:text="$title" android:textColor="#FFFFFF" android:textStyle="bold"

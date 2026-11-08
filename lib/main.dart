@@ -185,6 +185,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
           '」桌面快捷指令。正在檢查 MCP，尚未執行實體動作。';
     });
     _logs.log('WIDGET', '收到桌面快捷 ' + mode + '；等待使用者核准');
+    _notify('已收到「' + EboWidgetQuickCommand.labelFor(mode) +
+        '」桌面指令，檢查連線後會顯示確認視窗');
     unawaited(_runWidgetQuick(mode));
   }
 
@@ -212,6 +214,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   Future<void> _runWidgetQuick(String mode) async {
     if (_widgetQuickBusy) {
       _setWidgetStatus('已有一個桌面快捷指令執行中，未重複發送。');
+      _notify('上一個桌面指令仍在執行，這次沒有重複送出');
       return;
     }
     _widgetQuickBusy = true;
@@ -243,6 +246,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       if (!approved) {
         _logs.log('WIDGET', '使用者取消快捷：' + mode);
         _setWidgetStatus('已取消「${command.label}」，沒有送出 MCP 指令。');
+        _notify('已取消「${command.label}」，本次沒有機器人動作');
         return;
       }
       _setWidgetStatus('正在送出「${command.label}」至 EBO MCP…');

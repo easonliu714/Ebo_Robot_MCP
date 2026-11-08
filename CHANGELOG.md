@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.6+11 — 2026-11-08
+- Keep the previously approved glossy 3D launcher (robot/controller over cyan-blue gradient, fully transparent outer corners), the actual native widget skins and distinct widget-picker previews. Continue sharing this launcher across installed APK and both Android launcher icon formats.
+- Show a persistent high-contrast microphone recording panel when opened from a home widget or from the AI page, with explicit "取消錄音" and "結束並送出" actions. Cancel discards the local recording and never submits a Gemini or MCP request.
+- Show immediate confirmation when a four-command home widget is tapped, and explicit notices for overlapping or cancelled commands. All physical actions still require an in-app approval prompt and actual MCP tools/list validation.
+- Show a clear failure dialog on empty text send and visible warning if a second AI/voice command is submitted while another is in flight.
+- Maintain separate robot-only voice Q&A art, controller-only voice MCP art, small adaptable widget typography and aspect-preserving imagery, plus dock/patrol/pet/photo actions.
+- Preserve permanent JKS signing, encrypted credentials/conversation/memory, diagnostic export and all previous controls.
+
+
 ## 0.2.5+10 — 2026-11-08
 - Polish production launcher PNG by clipping stray cyan pixels outside the round-square app tile. Preserve the original teal/blue gradient; ensure RGBA corners are truly transparent and verified in CI. Same asset generates installer, legacy and adaptive launcher icons.
 - Retain real native widget layouts and Android picker preview art (robot-only Q&A, controller-only MCP, combined dual widget, and four quick actions); CI asserts manifest/preview resources were installed, not merely generated as mockups.

@@ -242,3 +242,18 @@ not used.
 The launcher is built from the approved 3D robot/controller artwork, retains
 the blue gradient within the rounded tile and clips all pixels outside the
 tile to true alpha transparency (including installer/legacy/adaptive icons).
+
+## v0.2.6 – On-device voice controls and widget notifications
+
+The installed Android widgets use real native `RemoteViews`, not mockups.
+Their widget-picker previews use `previewLayout` with distinct art and fall back
+to `previewImage` where required. The app/installer icon keeps its glossy robot
+and controller over a blue-cyan gradient with transparent outer corners.
+
+Opening a voice widget brings the app to the foreground, then explicitly
+highlights active recording. The recording panel has **Cancel** (discard local
+audio without triggering AI/MCP) and **Finish & Send**. A quick-command widget
+shows immediate arrival feedback, asks before physical actions, and displays
+clear errors or cancellation status. Empty or duplicate AI requests also report
+their reason rather than appearing to do nothing. No background microphone
+or unattended motion commands are started.

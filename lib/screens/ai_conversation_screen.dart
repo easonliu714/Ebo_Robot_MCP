@@ -68,15 +68,79 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     );
   }
 
-  Widget _voiceStatusBanner() => MaterialBanner(
-    leading: Icon(_recording ? Icons.mic : Icons.info_outline,
-        color: _recording ? Colors.redAccent : Colors.cyanAccent),
-    content: Text(_voiceStatus ?? '', style: const TextStyle(fontSize: 12)),
-    actions: [
-      TextButton(onPressed: () => setState(() => _voiceStatus = null),
-          child: const Text('關閉提示')),
-    ],
-  );
+  /// Always-visible foreground capture controls; never hide an active mic
+  /// behind the conversation scroll position or a transient snackbar.
+  Widget _voiceStatusBanner() {
+    if (_recording) {
+      return Card(
+        color: const Color(0xFF3C202B),
+        margin: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              const Icon(Icons.mic, color: Colors.redAccent, size: 24),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                _recordingGroundedQuestion
+                    ? '● 錄音中｜EBO 語音查詢'
+                    : '● 錄音中｜EBO MCP 語音控制',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              )),
+            ]),
+            const SizedBox(height: 4),
+            Text(_voiceStatus ?? '正在錄製語音；完成後請按送出。',
+                style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(
+                onPressed: _cancelVoiceRecording,
+                icon: const Icon(Icons.close, size: 17),
+                label: const Text('取消錄音'),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: FilledButton.icon(
+                onPressed: () => _toggleVoice(
+                    groundedQuestion: _recordingGroundedQuestion),
+                icon: const Icon(Icons.send, size: 17),
+                label: const Text('結束並送出'),
+              )),
+            ]),
+          ]),
+        ),
+      );
+    }
+    return MaterialBanner(
+      leading: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+      content: Text(_voiceStatus ?? '', style: const TextStyle(fontSize: 12)),
+      actions: [
+        TextButton(onPressed: () => setState(() => _voiceStatus = null),
+            child: const Text('關閉提示')),
+      ],
+    );
+  }
+
+  /// Cancel must stop microphone capture without querying Gemini or MCP.
+  Future<void> _cancelVoiceRecording() async {
+    if (!_recording) return;
+    setState(() {
+      _recording = false;
+      _recordingGroundedQuestion = false;
+      _voiceStatus = '錄音已取消，沒有送出 AI 或 MCP 指令。';
+    });
+    try {
+      final path = await _recorder.stop();
+      if (path != null) {
+        final recording = File(path);
+        if (await recording.exists()) await recording.delete();
+      }
+    } catch (e) {
+      widget.logs.log('VOICE', '取消錄音時發生錯誤：' +
+          e.runtimeType.toString(), level: 'WARN');
+    }
+    widget.logs.log('VOICE', '使用者取消前景錄音，未送出 AI/MCP');
+    _notify('已取消錄音，未執行任何指令');
+  }
 
 
   @override
@@ -159,9 +223,16 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   }
 
   Future<void> _send({Uint8List? audio}) async {
-    if (_busy) return;
+    if (_busy) {
+      _notify('上一個 AI 指令仍在處理中，請勿重複送出。');
+      return;
+    }
     final typed = _input.text.trim();
-    if (audio == null && typed.isEmpty) return;
+    if (audio == null && typed.isEmpty) {
+      await _showFailureDialog('尚未輸入指令',
+          '請先輸入文字，或使用語音錄製按鈕，再送出給 Gemini。');
+      return;
+    }
     setState(() {
       _busy = true;
       if (audio != null) _voiceStatus = '正在辨識語音並確認 MCP 指令類型…';
@@ -274,7 +345,10 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   }
 
   Future<void> _toggleVoice({bool groundedQuestion = false}) async {
-    if (_busy) return;
+    if (_busy) {
+      _notify('前一筆 AI 查詢或 MCP 動作尚未完成，目前無法啟動新錄音。');
+      return;
+    }
     if (_recording && _recordingGroundedQuestion != groundedQuestion) {
       _notify('請先按目前的錄音按鈕結束錄音');
       return;
@@ -549,7 +623,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
 
   @override
   Widget build(BuildContext context) => Column(children: [
-    if (_voiceStatus != null) _voiceStatusBanner(),
+    if (_voiceStatus != null || _recording) _voiceStatusBanner(),
     Expanded(child: AiConversationPanel(
     notebook: _notebook,
     input: _input,
