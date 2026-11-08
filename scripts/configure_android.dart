@@ -28,6 +28,9 @@ void main() {
     xml = xml.replaceFirst(
       '<application', '<application android:allowBackup="false"');
   }
+  // Brand both the launcher app name and widget-picker grouping.
+  xml = xml.replaceFirst('android:label="ebo_robot_mcp"',
+      'android:label="EBO 控制中心"');
   manifest.writeAsStringSync(xml);
 
   if (!File('android/key.properties').existsSync()) return;
