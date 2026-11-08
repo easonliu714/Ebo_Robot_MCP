@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7+12 — 2026-11-08
+- Analyzed 234 on-device diagnostic events. MCP acknowledgements take about 0.5s but do not confirm physical motion. A diagonal is a sequential turn + translation, not a simultaneous motor trajectory.
+- Add a conservative 400ms pacing interval following turn acknowledgements before the next held turn or diagonal translation. STOP on touch release remains immediate; cancel any unsent diagonal translation after release.
+- Expose angleSpeed=1 (firmware default) / 3 (smaller turning radius, not 3x speed), and diagonal microturn angle 7/10/15 degrees. Store selections in encrypted Android settings. Existing defaults remain unchanged pending physical calibration.
+- Respect operator-selected turn mode for single taps, held turns and diagonal rotations. Preserve 0.1m/0.2m translation steps and existing bounded hold safety limits.
+- Avoid duplicate STOP tool calls when tapping center while another hold is active. Include turn mode in diagnostic events and extend motion policy tests.
+- Retain permanent signing identity, approved launcher/widgets, conversation, favorites and private keys.
+
+
 ## 0.2.6+11 — 2026-11-08
 - Keep the previously approved glossy 3D launcher (robot/controller over cyan-blue gradient, fully transparent outer corners), the actual native widget skins and distinct widget-picker previews. Continue sharing this launcher across installed APK and both Android launcher icon formats.
 - Show a persistent high-contrast microphone recording panel when opened from a home widget or from the AI page, with explicit "取消錄音" and "結束並送出" actions. Cancel discards the local recording and never submits a Gemini or MCP request.

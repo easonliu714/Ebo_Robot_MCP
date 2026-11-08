@@ -79,7 +79,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   String? _widgetStatus;
   bool _widgetQuickBusy = false;
   String? _widgetVoiceMode;
-  String _version = '0.2.5+10';
+  String _version = '0.2.7+12';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _streamConnecting = false;
@@ -290,6 +290,10 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       if (!mounted) return;
       _settings = loaded;
       _settings.leftTurnDegrees = MoveStepPolicy.normalizeLeftAngle(loaded.leftTurnDegrees);
+      _settings.turnRadiusMode =
+          MoveStepPolicy.normalizeTurnRadiusMode(loaded.turnRadiusMode);
+      _settings.diagonalTurnDegrees =
+          MoveStepPolicy.normalizeDiagonalAngle(loaded.diagonalTurnDegrees);
       _version = info.version + '+' + info.buildNumber;
       _mcpInput.text = loaded.mcpJson;
       _keyInput.text = loaded.geminiKey;
@@ -421,6 +425,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       rtspUrl: _rtspInput.text.trim(),
       actionMap: _actionMap.exportJson(),
       leftTurnDegrees: _settings.leftTurnDegrees,
+      turnRadiusMode: _settings.turnRadiusMode,
+      diagonalTurnDegrees: _settings.diagonalTurnDegrees,
     );
     try {
       if (newSettings.mcpJson.isNotEmpty) McpConfig.parse(newSettings.mcpJson);
@@ -500,9 +506,12 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       if (definition == null) throw const FormatException('工具不在目前 tools/list 中');
       // Visible, user-controlled left-turn calibration is shared by TAP/HOLD.
       final args = Map<String, dynamic>.from(binding.args);
-      if (action == 'left' && binding.tool == 'robot_move' &&
-          args['moveId'] == 3) {
-        args['targetDistance'] = _settings.leftTurnDegrees;
+      if (binding.tool == 'robot_move' &&
+          (action == 'left' || action == 'right') &&
+          args['moveId'] == (action == 'left' ? 3 : 4)) {
+        if (action == 'left') args['targetDistance'] = _settings.leftTurnDegrees;
+        args['angleSpeed'] = _settings.turnRadiusMode;
+        args['playTime'] = 1;
       }
       ActionMap.validateArguments(definition, args);
       final elapsed = Stopwatch()..start();
@@ -537,7 +546,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     if (stop?.tool != 'robot_move' ||
         stop?.args['moveId'] != 5 || tool == null) return false;
     final steps = JoystickPolicy.isDiagonal(action)
-        ? JoystickPolicy.diagonalSteps(action)
+        ? JoystickPolicy.diagonalSteps(action,
+            turnDegrees: _settings.diagonalTurnDegrees)
         : <JoystickMove>[
             JoystickMove(_moveIds[action] ?? -1, MoveStepPolicy.distance(
                 action, leftAngle: _settings.leftTurnDegrees))
@@ -554,7 +564,12 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
         final args = Map<String, dynamic>.from(binding!.args)
           ..['targetDistance'] = step.targetDistance;
         if (JoystickPolicy.isDiagonal(action)) {
-          args['angleSpeed'] = 1;
+          if (step.moveId == 3 || step.moveId == 4) {
+            args['angleSpeed'] = _settings.turnRadiusMode;
+          }
+          args['playTime'] = 1;
+        } else if (step.moveId == 3 || step.moveId == 4) {
+          args['angleSpeed'] = _settings.turnRadiusMode;
           args['playTime'] = 1;
         }
         ActionMap.validateArguments(tool, args);
@@ -592,6 +607,10 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     final args = Map<String, dynamic>.from(binding.args)
       ..['targetDistance'] =
           MoveStepPolicy.distance(action, leftAngle: _settings.leftTurnDegrees);
+    if (action == 'left' || action == 'right') {
+      args['angleSpeed'] = _settings.turnRadiusMode;
+      args['playTime'] = 1;
+    }
     ActionMap.validateArguments(tool, args);
     final elapsed = Stopwatch()..start();
     await _mcp.call('robot_move', args);
@@ -599,7 +618,13 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     _logs.log('MOVE_HOLD', '完成長按單步：$action moveId=' +
         args['moveId'].toString() + ' angleOrDistance=' +
         args['targetDistance'].toString() +
-        ' elapsedMs=' + elapsed.elapsedMilliseconds.toString());
+        ' angleSpeed=' + (args['angleSpeed']?.toString() ?? 'default') +
+        ' elapsedMs=' + elapsed.elapsedMilliseconds.toString() +
+        '（MCP 已回應，不代表機器人已達目標角度）');
+    if (action == 'left' || action == 'right') {
+      // STOP on release remains immediate. Delay only the NEXT held turn.
+      await Future<void>.delayed(MoveStepPolicy.turnSettling);
+    }
   }
 
   /// A diagonal is NOT native simultaneous velocity control. Each step pair
@@ -608,7 +633,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     if (!_mcp.connected) throw const McpException('MCP 尚未連線');
     final tool = _mcp.tools.where((t) => t.name == 'robot_move').firstOrNull;
     if (tool == null) throw const FormatException('缺少 robot_move');
-    final steps = JoystickPolicy.diagonalSteps(action);
+    final steps = JoystickPolicy.diagonalSteps(action,
+        turnDegrees: _settings.diagonalTurnDegrees);
     final queued = <Map<String, dynamic>>[];
     for (final step in steps) {
       final mapping = switch (step.moveId) {
@@ -623,8 +649,10 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       final args = Map<String, dynamic>.from(bound!.args)
         ..['moveId'] = step.moveId
         ..['targetDistance'] = step.targetDistance
-        ..['angleSpeed'] = 1
         ..['playTime'] = 1;
+      if (step.moveId == 3 || step.moveId == 4) {
+        args['angleSpeed'] = _settings.turnRadiusMode;
+      }
       ActionMap.validateArguments(tool, args);
       queued.add(args);
     }
@@ -641,9 +669,14 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
           ' stage=' + (i + 1).toString() + '/' + queued.length.toString() +
           ' moveId=' + args['moveId'].toString() +
           ' targetDistance=' + args['targetDistance'].toString() +
-          ' angleSpeed=1 playTime=1 elapsedMs=' +
+          ' angleSpeed=' + (args['angleSpeed']?.toString() ?? 'default') +
+          ' playTime=1 elapsedMs=' +
           clock.elapsedMilliseconds.toString() +
           '（MCP 已回應，未確認實際旋轉或位移）');
+      if (i + 1 < queued.length) {
+        // MCP ACK is not physical completion; respect a safe settling window.
+        await Future<void>.delayed(MoveStepPolicy.turnSettling);
+      }
     }
   }
 
@@ -651,8 +684,11 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     if (action == 'stop') {
       ++_joystickEpoch;
       _joystickContact = false;
-      if (_heldMove.active) await _heldMove.end();
-      await _robotAction('stop');
+      if (_heldMove.active) {
+        await _heldMove.end(); // end() already sends STOP; avoid duplicate.
+      } else {
+        await _robotAction('stop');
+      }
       return;
     }
     if (!JoystickPolicy.isDiagonal(action)) {
@@ -938,6 +974,75 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     ]),
   );
 
+  /// Optional operator calibration; avoid assuming RPC ACK equals motor pose.
+  Widget _turnMotionOptions() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    child: Column(children: [
+      Row(children: [
+        const Icon(Icons.rotate_right, color: Colors.cyanAccent),
+        const SizedBox(width: 8),
+        const Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('轉彎半徑模式'),
+            Text('1＝預設，3＝較小半徑（不是三倍速度）',
+                style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        )),
+        DropdownButton<int>(
+          value: MoveStepPolicy.normalizeTurnRadiusMode(_settings.turnRadiusMode),
+          items: const [
+            DropdownMenuItem(value: 1, child: Text('1 預設')),
+            DropdownMenuItem(value: 3, child: Text('3 小半徑')),
+          ],
+          onChanged: (_holdingDirection || _commandBusy) ? null : (value) async {
+            if (value == null) return;
+            setState(() => _settings.turnRadiusMode = value);
+            try {
+              await _store.save(_settings);
+              _logs.log('MOVE_CONFIG', 'angleSpeed=' + value.toString());
+            } catch (e) {
+              _notify('轉彎半徑設定無法儲存');
+            }
+          },
+        ),
+      ]),
+      Row(children: [
+        const Icon(Icons.call_split, color: Colors.cyanAccent),
+        const SizedBox(width: 8),
+        const Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('斜向轉角微步'),
+            Text('先轉彎再前進；並非同步弧線',
+                style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        )),
+        DropdownButton<int>(
+          value: MoveStepPolicy.normalizeDiagonalAngle(_settings.diagonalTurnDegrees),
+          items: const [
+            DropdownMenuItem(value: 7, child: Text('7°')),
+            DropdownMenuItem(value: 10, child: Text('10°')),
+            DropdownMenuItem(value: 15, child: Text('15°')),
+          ],
+          onChanged: (_holdingDirection || _commandBusy) ? null : (value) async {
+            if (value == null) return;
+            setState(() => _settings.diagonalTurnDegrees = value);
+            try {
+              await _store.save(_settings);
+              _logs.log('MOVE_CONFIG', '斜向轉角=' + value.toString() + '°');
+            } catch (e) {
+              _notify('斜向轉角設定無法儲存');
+            }
+          },
+        ),
+      ]),
+      const Text('轉向已加入 400ms 指令緩衝；放開仍立即排入 STOP。'
+          '請在空曠地面逐步測試，MCP 回覆不等於動作完成。',
+          style: TextStyle(fontSize: 12, color: Colors.white70)),
+    ]),
+  );
+
   Widget _controlPage() => _expandedControl ? _expandedControlPage() : ListView(
     padding: const EdgeInsets.all(12),
     children: [
@@ -952,6 +1057,7 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       const SizedBox(height: 8),
       const Center(child: Text('點按單步；長按連發（最多 12 秒）。放開會停止續發並送停止指令。')),
       _leftTurnCalibration(),
+      _turnMotionOptions(),
       // Stable widget position: never unmount the active gesture on state updates.
       Center(child: Text(_holdingDirection ? '● 連續控制：${_heldDirection ?? "未知方向"}' : ' ',
           style: const TextStyle(color: Colors.cyanAccent))),
