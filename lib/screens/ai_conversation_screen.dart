@@ -94,13 +94,25 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
   }
 
   void _consumeWidgetVoice() {
-    if (!mounted || widget.voiceRequestId == 0 || _busy || _recording ||
+    if (!mounted || widget.voiceRequestId == 0 ||
         _consumedVoiceRequest == widget.voiceRequestId) return;
     _consumedVoiceRequest = widget.voiceRequestId;
-    setState(() => _voiceStatus = '已收到桌面語音入口，正在檢查麥克風權限並啟動錄音…');
     final mode = widget.widgetVoiceMode;
     if (mode != 'voice_qa' && mode != 'voice_mcp') return;
-    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode.toString());
+    if (_busy || _recording) {
+      setState(() => _voiceStatus = '目前已有 AI 指令或錄音尚未完成，未重新啟動麥克風。');
+      unawaited(_showFailureDialog('尚無法開始新的語音功能',
+          '目前正在處理其他指令或錄音。請先完成或停止目前流程，再點擊桌面小工具。'));
+      return;
+    }
+    if (widget.apiKey.trim().isEmpty) {
+      setState(() => _voiceStatus = '尚未設定 Gemini API Key，沒有開始錄音。');
+      unawaited(_showFailureDialog('Gemini API Key 尚未設定',
+          '請至「設定」填入 Gemini API Key，再點擊桌面小工具。'));
+      return;
+    }
+    setState(() => _voiceStatus = '已收到桌面語音入口，正在檢查麥克風權限並啟動錄音…');
+    widget.logs.log('WIDGET', '已進入 AI 前景，啟動語音錄製模式：' + mode);
     unawaited(_toggleVoice(groundedQuestion: mode == 'voice_qa'));
   }
 
