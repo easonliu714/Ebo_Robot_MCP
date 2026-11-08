@@ -202,3 +202,23 @@ The launcher no longer shows Wi-Fi arcs. CI renders its original robot and
 controller shapes at 1.5× scale using
 `python3 scripts/render_launcher_icon.py`, then installs both Android icon
 formats. Committed original art remains available for reproducibility.
+
+## v0.2.4: Android launcher art and actionable home-screen widgets
+
+A rounded cyan/blue 3D icon with transparent outer corners replaces the old
+outline icon in both the installed app and signed APK. Four distinct native
+home widgets are provided: EBO Voice Q&A (robot art), EBO Voice MCP Control
+(controller art), Dual Voice, and Quick Actions (Dock / 2-minute Patrol /
+Find Saved Pet / Photo). The widget picker uses dedicated preview images.
+
+All widget activations bring the app to foreground. Voice modes visibly state
+whether microphone capture started or permission was denied; tap again to
+submit. A quick action shows its requested MCP command and arguments for
+explicit approval. No background robot commands or hidden recording are used.
+The pet shortcut reads an explicit cat/dog record from the encrypted notebook;
+without a record it shows an error rather than guessing a target.
+
+In the AI page, commands that cannot be executed surface a persistent
+information dialog. When a weather/news question is accidentally submitted to
+the voice MCP mode, the app offers to reroute to grounded Q&A. This does not
+execute any MCP motion command without consent.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4+9 — 2026-11-08
+
+- Replace launcher and installed APK adaptive/legacy icons with the approved glossy 3D robot plus controller in a cyan-to-blue rounded-square gradient. Outer corners remain transparent.
+- Replace text-only home voice widget surfaces with the approved 3D art: the query widget shows the robot; the MCP voice widget shows the controller. Native text auto-sizes across launcher grid widths.
+- Provide distinct Android widget-picker thumbnails via previewImage/previewLayout, proper per-provider names, a dual-mode layout and a 4-button quick-action widget (dock, patrol, find registered pet, take photo).
+- All quick commands open the app for explicit confirmation, validate exact live MCP tool names/schemas, and return a persistent status / failure explanation. Patrol is capped to 120 seconds; find-pet resolves only from user-saved encrypted notebook entries.
+- Add persistent foreground voice-mode indicator, recording-state feedback, information-query guidance when voice MCP mode is used for weather/news, and explicit AI/MCP failure dialogs.
+- Preserve signing identity, tool mapping, encrypted credentials, favorite prompts, notebooks, and diagnostics. Built assets come from user-approved images; no API secrets are committed.
+
+
 ## 0.2.3+8 — 2026-11-07
 
 - Replace the four-button D-pad with an eight-sector circular pad in the Control page and enlarged semi-transparent RTSP overlay. Tap means one step, hold means bounded repeat; center requests STOP.
