@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'services/action_map.dart';
+import 'services/ai_notebook.dart';
+import 'services/widget_quick_commands.dart';
 import 'services/ebo_tool_catalog.dart';
 import 'screens/ebo_tool_panel.dart';
 import 'screens/ai_conversation_screen.dart';
@@ -73,8 +75,11 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
 
   int _page = 0;
   int _widgetVoiceRequest = 0;
+  final Completer<void> _initialSettingsReady = Completer<void>();
+  String? _widgetStatus;
+  bool _widgetQuickBusy = false;
   String? _widgetVoiceMode;
-  String _version = '0.2.3+8';
+  String _version = '0.2.4+9';
   bool _connecting = false;
   bool _videoRequested = false;
   bool _streamConnecting = false;
@@ -145,16 +150,121 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
   }
 
   void _handleWidgetTarget(String? mode) {
-    if (!mounted || (mode != 'voice_qa' && mode != 'voice_mcp')) return;
-    _selectPage(2);
+    if (!mounted || mode == null) return;
+    if (mode == 'voice_qa' || mode == 'voice_mcp') {
+      _selectPage(2);
+      setState(() {
+        _widgetVoiceMode = mode;
+        _widgetVoiceRequest++;
+        _widgetStatus = mode == 'voice_qa'
+            ? '🎙️ 已開啟「EBO 語音查詢」。即將啟動麥克風；看到錄音按鈕後開始說話，再點一次送出。'
+            : '🎤 已開啟「EBO 語音控制」。錄音完成後會檢查 MCP 工具，所有機器人動作仍須確認。';
+      });
+      _logs.log('WIDGET', '已進入 ' +
+          (mode == 'voice_qa' ? '語音查詢' : 'MCP 語音指令') +
+          '模式；等待前景麥克風確認');
+      _notify('已開啟語音功能，請注意 AI 分頁頂端的錄音狀態');
+      return;
+    }
+    if (!EboWidgetQuickCommand.supports(mode)) return;
+    _selectPage(1);
     setState(() {
-      _widgetVoiceMode = mode;
-      _widgetVoiceRequest++;
+      _widgetStatus = '已收到「' + EboWidgetQuickCommand.labelFor(mode) +
+          '」桌面快捷指令。正在檢查 MCP，尚未執行實體動作。';
     });
-    _logs.log('WIDGET', 'Android 桌面啟動 ' +
-        (mode == 'voice_qa' ? '語音查詢' : '語音指令') +
-        '；僅在 App 前景啟用錄音');
+    _logs.log('WIDGET', '收到桌面快捷 ' + mode + '；等待使用者核准');
+    unawaited(_runWidgetQuick(mode));
   }
+
+  Future<void> _widgetInformation(String title, String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: Text(Redactor.clean(message))),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('了解')),
+        ],
+      ),
+    );
+  }
+
+  void _setWidgetStatus(String status) {
+    if (mounted) setState(() => _widgetStatus = status);
+  }
+
+  /// Every physical command is approved in the foreground, schema validated,
+  /// and logged without exporting its private notebook contents.
+  Future<void> _runWidgetQuick(String mode) async {
+    if (_widgetQuickBusy) {
+      _setWidgetStatus('已有一個桌面快捷指令執行中，未重複發送。');
+      return;
+    }
+    _widgetQuickBusy = true;
+    try {
+      await _initialSettingsReady.future;
+      if (!mounted) return;
+      final notebook = AiNotebook();
+      await notebook.load();
+      final command = EboWidgetQuickCommand.resolve(mode, notebook.notes);
+      if (!_mcp.connected) {
+        if (_connecting) {
+          for (var i = 0; i < 40 && _connecting; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 250));
+          }
+        }
+        if (!_mcp.connected && !_connecting) await _connectMcp();
+      }
+      if (!_mcp.connected) {
+        throw const McpException('MCP 未連線；請確認服務、AccessKey 與網路狀態');
+      }
+      final tool = _mcp.tools.where((t) => t.name == command.tool).firstOrNull;
+      if (tool == null) {
+        throw FormatException('原廠未提供 ${command.tool}，無法執行「${command.label}」');
+      }
+      ActionMap.validateArguments(tool, command.arguments);
+      if (!mounted) return;
+      _setWidgetStatus('「${command.label}」已就緒；等待您確認實體 MCP 動作。');
+      final approved = await _approveTool(command.tool, command.arguments);
+      if (!approved) {
+        _logs.log('WIDGET', '使用者取消快捷：' + mode);
+        _setWidgetStatus('已取消「${command.label}」，沒有送出 MCP 指令。');
+        return;
+      }
+      _setWidgetStatus('正在送出「${command.label}」至 EBO MCP…');
+      final stopwatch = Stopwatch()..start();
+      await _mcp.call(command.tool, command.arguments);
+      stopwatch.stop();
+      _logs.log('WIDGET', 'MCP 接受快捷：' + command.tool +
+          ' 耗時=' + stopwatch.elapsedMilliseconds.toString() + 'ms');
+      _setWidgetStatus('✅ 已送出「${command.label}」；MCP 已回應，但未確認機器人已完成實際動作。');
+      _notify('「${command.label}」已送出，請確認 EBO 實體狀態');
+    } catch (e) {
+      final detail = e is FormatException ? e.message : e is McpException
+          ? e.message : e.runtimeType.toString();
+      _logs.log('WIDGET', '快捷未執行：' +
+          Redactor.clean(detail), level: 'ERROR');
+      _setWidgetStatus('⚠️「${EboWidgetQuickCommand.labelFor(mode)}」未執行。請閱讀錯誤視窗。');
+      await _widgetInformation('桌面快捷指令無法執行',
+          '功能：${EboWidgetQuickCommand.labelFor(mode)}\n原因：$detail\n\n'
+          '本次未確認新的 MCP 動作。可檢查連線與 Log。');
+    } finally {
+      _widgetQuickBusy = false;
+    }
+  }
+
+  Widget _widgetStatusBanner() => MaterialBanner(
+    leading: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+    content: Text(_widgetStatus ?? '', style: const TextStyle(fontSize: 12)),
+    actions: [
+      TextButton(
+        onPressed: () => setState(() => _widgetStatus = null),
+        child: const Text('關閉提示'),
+      ),
+    ],
+  );
 
   Future<void> _initialize() async {
     await _logs.initialize();
@@ -180,6 +290,8 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
     } catch (e) {
       _logs.log('SETTINGS', '讀取加密設定失敗：' + e.toString(), level: 'ERROR');
       _notify('無法讀取設定，請檢查裝置加密儲存空間');
+    } finally {
+      if (!_initialSettingsReady.isCompleted) _initialSettingsReady.complete();
     }
   }
 
@@ -1078,13 +1190,16 @@ class _ControllerScreenState extends State<ControllerScreen> with WidgetsBinding
       ],
     ),
     body: SafeArea(
-      child: switch (_page) {
-        0 => _monitorPage(),
-        1 => _controlPage(),
-        2 => _aiPage(),
-        3 => _settingsPage(),
-        _ => _diagnosticsPage(),
-      },
+      child: Column(children: [
+        if (_widgetStatus != null) _widgetStatusBanner(),
+        Expanded(child: switch (_page) {
+          0 => _monitorPage(),
+          1 => _controlPage(),
+          2 => _aiPage(),
+          3 => _settingsPage(),
+          _ => _diagnosticsPage(),
+        }),
+      ]),
     ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: _page,
