@@ -238,7 +238,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> with Widget
     } finally {
       if (mounted) setState(() => _busy = false);
       if (forwardToGrounded != null && mounted) {
-        final question = forwardToGrounded!;
+        final question = forwardToGrounded;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) unawaited(_groundedSpeak(promptOverride: question));
         });
